@@ -68,6 +68,11 @@ fn format_compact(value: &EdnValue, config: &OutputConfig) -> String {
         EdnValue::Tagged { tag, value } => {
             format!("#{} {}", tag, format_compact(value, config))
         }
+        EdnValue::WithMetadata { metadata, value } => {
+            format!("^{} {}", format_compact(metadata, config), format_compact(value, config))
+        }
+        EdnValue::Instant(s) => format!("#inst \"{}\"", s),
+        EdnValue::Uuid(s) => format!("#uuid \"{}\"", s),
     }
 }
 
@@ -99,6 +104,11 @@ fn format_pretty(value: &EdnValue, config: &OutputConfig, depth: usize) -> Strin
         EdnValue::Tagged { tag, value } => {
             format!("#{} {}", tag, format_pretty(value, config, depth))
         }
+        EdnValue::WithMetadata { metadata, value } => {
+            format!("^{} {}", format_pretty(metadata, config, depth), format_pretty(value, config, depth))
+        }
+        EdnValue::Instant(s) => format!("#inst \"{}\"", s),
+        EdnValue::Uuid(s) => format!("#uuid \"{}\"", s),
     }
 }
 
@@ -278,12 +288,11 @@ fn should_format_map_inline(
 
 /// Check if a value is a collection
 fn is_collection(value: &EdnValue) -> bool {
-    matches!(value, 
-        EdnValue::Vector(_) | 
-        EdnValue::List(_) | 
-        EdnValue::Map(_) | 
-        EdnValue::Set(_)
-    )
+    match value {
+        EdnValue::Vector(_) | EdnValue::List(_) | EdnValue::Map(_) | EdnValue::Set(_) => true,
+        EdnValue::WithMetadata { value, .. } => is_collection(value),
+        _ => false,
+    }
 }
 
 /// Check if a collection is simple (contains only primitive values)
@@ -293,6 +302,7 @@ fn is_simple_collection(value: &EdnValue) -> bool {
         EdnValue::List(l) => l.iter().all(|item| !is_collection(item)),
         EdnValue::Map(m) => m.iter().all(|(k, v)| !is_collection(k) && !is_collection(v)),
         EdnValue::Set(s) => s.iter().all(|item| !is_collection(item)),
+        EdnValue::WithMetadata { value, .. } => is_simple_collection(value),
         _ => true,
     }
 }

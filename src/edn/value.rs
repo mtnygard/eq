@@ -22,6 +22,12 @@ pub enum EdnValue {
         tag: String,
         value: Box<EdnValue>,
     },
+    WithMetadata {
+        metadata: Box<EdnValue>,
+        value: Box<EdnValue>,
+    },
+    Instant(String), // ISO 8601 timestamp string
+    Uuid(String),    // UUID string
 }
 
 impl EdnValue {
@@ -41,6 +47,9 @@ impl EdnValue {
             EdnValue::Map(_) => "map",
             EdnValue::Set(_) => "set",
             EdnValue::Tagged { .. } => "tagged",
+            EdnValue::WithMetadata { .. } => "with-metadata",
+            EdnValue::Instant(_) => "instant",
+            EdnValue::Uuid(_) => "uuid",
         }
     }
     
@@ -57,6 +66,7 @@ impl EdnValue {
             EdnValue::Map(m) => Some(m.len()),
             EdnValue::Set(s) => Some(s.len()),
             EdnValue::String(s) => Some(s.chars().count()),
+            EdnValue::WithMetadata { value, .. } => value.count(),
             _ => None,
         }
     }
@@ -82,6 +92,7 @@ impl EdnValue {
                     l.get((len + i) as usize)
                 }
             }
+            (EdnValue::WithMetadata { value, .. }, k) => value.get(k),
             _ => None,
         }
     }
@@ -138,6 +149,12 @@ impl Hash for EdnValue {
                 tag.hash(state);
                 value.hash(state);
             }
+            EdnValue::WithMetadata { metadata, value } => {
+                metadata.hash(state);
+                value.hash(state);
+            }
+            EdnValue::Instant(s) => s.hash(state),
+            EdnValue::Uuid(s) => s.hash(state),
         }
     }
 }
@@ -196,6 +213,9 @@ impl fmt::Display for EdnValue {
                 write!(f, "}}")
             }
             EdnValue::Tagged { tag, value } => write!(f, "#{} {}", tag, value),
+            EdnValue::WithMetadata { metadata, value } => write!(f, "^{} {}", metadata, value),
+            EdnValue::Instant(s) => write!(f, "#inst \"{}\"", s),
+            EdnValue::Uuid(s) => write!(f, "#uuid \"{}\"", s),
         }
     }
 }

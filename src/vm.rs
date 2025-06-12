@@ -79,6 +79,12 @@ impl QueryVM {
                 let result = match coll {
                     EdnValue::Vector(ref v) => v.first().cloned().unwrap_or(EdnValue::Nil),
                     EdnValue::List(ref l) => l.first().cloned().unwrap_or(EdnValue::Nil),
+                    EdnValue::WithMetadata { ref value, .. } => {
+                        // Recursively handle metadata - apply first to the wrapped value
+                        self.stack.push((**value).clone());
+                        self.execute_instruction(&OpCode::First, constants)?;
+                        return Ok(());
+                    }
                     _ => EdnValue::Nil,
                 };
                 self.stack.push(result);
@@ -89,6 +95,11 @@ impl QueryVM {
                 let result = match coll {
                     EdnValue::Vector(ref v) => v.last().cloned().unwrap_or(EdnValue::Nil),
                     EdnValue::List(ref l) => l.last().cloned().unwrap_or(EdnValue::Nil),
+                    EdnValue::WithMetadata { ref value, .. } => {
+                        self.stack.push((**value).clone());
+                        self.execute_instruction(&OpCode::Last, constants)?;
+                        return Ok(());
+                    }
                     _ => EdnValue::Nil,
                 };
                 self.stack.push(result);
@@ -111,6 +122,11 @@ impl QueryVM {
                             EdnValue::List(l[1..].to_vec())
                         }
                     }
+                    EdnValue::WithMetadata { ref value, .. } => {
+                        self.stack.push((**value).clone());
+                        self.execute_instruction(&OpCode::Rest, constants)?;
+                        return Ok(());
+                    }
                     _ => EdnValue::Vector(Vec::new()),
                 };
                 self.stack.push(result);
@@ -130,6 +146,12 @@ impl QueryVM {
                     let result = match coll {
                         EdnValue::Vector(ref v) => EdnValue::Vector(v.iter().take(count).cloned().collect()),
                         EdnValue::List(ref l) => EdnValue::List(l.iter().take(count).cloned().collect()),
+                        EdnValue::WithMetadata { ref value, .. } => {
+                            self.stack.push((**value).clone());
+                            self.stack.push(EdnValue::Integer(count as i64));
+                            self.execute_instruction(&OpCode::Take, constants)?;
+                            return Ok(());
+                        }
                         _ => EdnValue::Vector(Vec::new()),
                     };
                     self.stack.push(result);
@@ -152,6 +174,12 @@ impl QueryVM {
                     let result = match coll {
                         EdnValue::Vector(ref v) => EdnValue::Vector(v.iter().skip(count).cloned().collect()),
                         EdnValue::List(ref l) => EdnValue::List(l.iter().skip(count).cloned().collect()),
+                        EdnValue::WithMetadata { ref value, .. } => {
+                            self.stack.push((**value).clone());
+                            self.stack.push(EdnValue::Integer(count as i64));
+                            self.execute_instruction(&OpCode::Drop, constants)?;
+                            return Ok(());
+                        }
                         _ => EdnValue::Vector(Vec::new()),
                     };
                     self.stack.push(result);

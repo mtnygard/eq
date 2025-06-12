@@ -220,6 +220,177 @@ fn test_broken_queries() {
 }
 
 #[test]
+fn test_metadata_parsing() {
+    // Test simple keyword metadata
+    fs::write("test_metadata1.edn", r#"^:tag {:key "value"}"#).unwrap();
+    let output = Command::new("./target/release/eq")
+        .args(&[".", "test_metadata1.edn"])
+        .output()
+        .expect("Failed to execute eq");
+    
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("^:tag"));
+    assert!(stdout.contains("{:key \"value\"}"));
+    fs::remove_file("test_metadata1.edn").unwrap();
+    
+    // Test map metadata with the user's example
+    fs::write("test_metadata2.edn", r#"{:features ^{:replace true} #{:datomic :datomic-init}}"#).unwrap();
+    let output = Command::new("./target/release/eq")
+        .args(&[".", "test_metadata2.edn"])
+        .output()
+        .expect("Failed to execute eq");
+    
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("^{:replace true}"));
+    assert!(stdout.contains("#{:datomic :datomic-init}"));
+    fs::remove_file("test_metadata2.edn").unwrap();
+    
+    // Test accessing the value through metadata
+    fs::write("test_metadata3.edn", r#"^{:doc "A set"} #{:a :b :c}"#).unwrap();
+    let output = Command::new("./target/release/eq")
+        .args(&["(count)", "test_metadata3.edn"])
+        .output()
+        .expect("Failed to execute eq");
+    
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert_eq!(stdout.trim(), "3"); // Should count the set elements, not the metadata
+    fs::remove_file("test_metadata3.edn").unwrap();
+}
+
+#[test]
+fn test_discard_macro() {
+    // Test discard in vector
+    fs::write("test_discard1.edn", r#"[1 2 #_ 3 4]"#).unwrap();
+    let output = Command::new("./target/release/eq")
+        .args(&[".", "test_discard1.edn"])
+        .output()
+        .expect("Failed to execute eq");
+    
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("[1 2 4]"));
+    fs::remove_file("test_discard1.edn").unwrap();
+    
+    // Test discard in map
+    fs::write("test_discard2.edn", r#"{:a 1 #_ :b #_ 2 :c 3}"#).unwrap();
+    let output = Command::new("./target/release/eq")
+        .args(&[".", "test_discard2.edn"])
+        .output()
+        .expect("Failed to execute eq");
+    
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains(":a 1"));
+    assert!(stdout.contains(":c 3"));
+    assert!(!stdout.contains(":b"));
+    fs::remove_file("test_discard2.edn").unwrap();
+    
+    // Test discard in set
+    fs::write("test_discard3.edn", r#"#{1 #_ 2 3}"#).unwrap();
+    let output = Command::new("./target/release/eq")
+        .args(&["(count)", "test_discard3.edn"])
+        .output()
+        .expect("Failed to execute eq");
+    
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert_eq!(stdout.trim(), "2"); // Should be 2 elements after discarding 2
+    fs::remove_file("test_discard3.edn").unwrap();
+}
+
+#[test]
+fn test_builtin_tagged_literals() {
+    // Test #inst
+    fs::write("test_inst.edn", r#"#inst "2023-01-01T12:30:45Z""#).unwrap();
+    let output = Command::new("./target/release/eq")
+        .args(&[".", "test_inst.edn"])
+        .output()
+        .expect("Failed to execute eq");
+    
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("#inst \"2023-01-01T12:30:45Z\""));
+    fs::remove_file("test_inst.edn").unwrap();
+    
+    // Test #uuid
+    fs::write("test_uuid.edn", r#"#uuid "f81d4fae-7dec-11d0-a765-00a0c91e6bf6""#).unwrap();
+    let output = Command::new("./target/release/eq")
+        .args(&[".", "test_uuid.edn"])
+        .output()
+        .expect("Failed to execute eq");
+    
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("#uuid \"f81d4fae-7dec-11d0-a765-00a0c91e6bf6\""));
+    fs::remove_file("test_uuid.edn").unwrap();
+    
+    // Test invalid formats
+    fs::write("test_bad_inst.edn", r#"#inst "not-a-date""#).unwrap();
+    let output = Command::new("./target/release/eq")
+        .args(&[".", "test_bad_inst.edn"])
+        .output()
+        .expect("Failed to execute eq");
+    
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(stderr.contains("Invalid instant format"));
+    fs::remove_file("test_bad_inst.edn").unwrap();
+}
+
+#[test]
+fn test_unicode_escapes() {
+    // Test unicode character literal
+    fs::write("test_unicode_char.edn", r#"\u03A9"#).unwrap();
+    let output = Command::new("./target/release/eq")
+        .args(&[".", "test_unicode_char.edn"])
+        .output()
+        .expect("Failed to execute eq");
+    
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("\\Ω") || stdout.contains("Ω")); // Output format may vary
+    fs::remove_file("test_unicode_char.edn").unwrap();
+    
+    // Test unicode in string
+    fs::write("test_unicode_string.edn", r#""Hello \u03A9 World""#).unwrap();
+    let output = Command::new("./target/release/eq")
+        .args(&[".", "test_unicode_string.edn"])
+        .output()
+        .expect("Failed to execute eq");
+    
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("Hello Ω World"));
+    fs::remove_file("test_unicode_string.edn").unwrap();
+}
+
+#[test]
+fn test_new_character_literals() {
+    // Test formfeed character
+    fs::write("test_formfeed.edn", r#"\formfeed"#).unwrap();
+    let output = Command::new("./target/release/eq")
+        .args(&[".", "test_formfeed.edn"])
+        .output()
+        .expect("Failed to execute eq");
+    
+    assert!(output.status.success());
+    fs::remove_file("test_formfeed.edn").unwrap();
+    
+    // Test backspace character
+    fs::write("test_backspace.edn", r#"\backspace"#).unwrap();
+    let output = Command::new("./target/release/eq")
+        .args(&[".", "test_backspace.edn"])
+        .output()
+        .expect("Failed to execute eq");
+    
+    assert!(output.status.success());
+    fs::remove_file("test_backspace.edn").unwrap();
+}
+
+#[test]
 fn test_file_errors() {
     // Test non-existent file
     let output = Command::new("./target/release/eq")
