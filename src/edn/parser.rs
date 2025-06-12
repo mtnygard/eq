@@ -534,6 +534,10 @@ impl Parser {
                     self.column += 1;
                 }
                 self.advance();
+            } else if ch == ',' {
+                // Treat comma as whitespace (EDN/Clojure behavior)
+                self.column += 1;
+                self.advance();
             } else if ch == ';' {
                 // Skip comment until end of line
                 while !self.is_at_end() && self.peek() != '\n' {
@@ -1092,6 +1096,71 @@ mod tests {
         for input in inputs {
             let mut parser = Parser::new(input);
             assert_eq!(parser.parse().unwrap(), EdnValue::Integer(42));
+        }
+    }
+
+    #[test]
+    fn test_comma_as_whitespace() {
+        // Test commas in vectors
+        let mut parser = Parser::new("[1, 2, 3]");
+        let result = parser.parse().unwrap();
+        
+        if let EdnValue::Vector(v) = result {
+            assert_eq!(v.len(), 3);
+            assert_eq!(v[0], EdnValue::Integer(1));
+            assert_eq!(v[1], EdnValue::Integer(2));
+            assert_eq!(v[2], EdnValue::Integer(3));
+        } else {
+            panic!("Expected vector");
+        }
+        
+        // Test commas in maps
+        let mut parser = Parser::new("{:a 1, :b 2, :c 3}");
+        let result = parser.parse().unwrap();
+        
+        if let EdnValue::Map(m) = result {
+            assert_eq!(m.len(), 3);
+            assert_eq!(m.get(&EdnValue::Keyword("a".to_string())), Some(&EdnValue::Integer(1)));
+            assert_eq!(m.get(&EdnValue::Keyword("b".to_string())), Some(&EdnValue::Integer(2)));
+            assert_eq!(m.get(&EdnValue::Keyword("c".to_string())), Some(&EdnValue::Integer(3)));
+        } else {
+            panic!("Expected map");
+        }
+        
+        // Test commas in sets
+        let mut parser = Parser::new("#{1, 2, 3}");
+        let result = parser.parse().unwrap();
+        
+        if let EdnValue::Set(s) = result {
+            assert_eq!(s.len(), 3);
+            assert!(s.contains(&EdnValue::Integer(1)));
+            assert!(s.contains(&EdnValue::Integer(2)));
+            assert!(s.contains(&EdnValue::Integer(3)));
+        } else {
+            panic!("Expected set");
+        }
+        
+        // Test multiple consecutive commas (treated as whitespace)
+        let mut parser = Parser::new("[1,, 2,,, 3]");
+        let result = parser.parse().unwrap();
+        
+        if let EdnValue::Vector(v) = result {
+            assert_eq!(v.len(), 3);
+            assert_eq!(v[0], EdnValue::Integer(1));
+            assert_eq!(v[1], EdnValue::Integer(2));
+            assert_eq!(v[2], EdnValue::Integer(3));
+        } else {
+            panic!("Expected vector");
+        }
+        
+        // Test trailing commas
+        let mut parser = Parser::new("[1, 2, 3,]");
+        let result = parser.parse().unwrap();
+        
+        if let EdnValue::Vector(v) = result {
+            assert_eq!(v.len(), 3);
+        } else {
+            panic!("Expected vector");
         }
     }
 }

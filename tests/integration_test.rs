@@ -391,6 +391,59 @@ fn test_new_character_literals() {
 }
 
 #[test]
+fn test_comma_as_whitespace() {
+    // Test commas in various collections
+    fs::write("test_commas.edn", r#"[1, 2, 3]"#).unwrap();
+    let output = Command::new("./target/release/eq")
+        .args(&[".", "test_commas.edn"])
+        .output()
+        .expect("Failed to execute eq");
+    
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("[1 2 3]"));
+    fs::remove_file("test_commas.edn").unwrap();
+    
+    // Test commas in map
+    fs::write("test_commas_map.edn", r#"{:a 1, :b 2, :c 3}"#).unwrap();
+    let output = Command::new("./target/release/eq")
+        .args(&[".", "test_commas_map.edn"])
+        .output()
+        .expect("Failed to execute eq");
+    
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains(":a 1"));
+    assert!(stdout.contains(":b 2"));
+    assert!(stdout.contains(":c 3"));
+    fs::remove_file("test_commas_map.edn").unwrap();
+    
+    // Test trailing commas
+    fs::write("test_trailing_commas.edn", r#"[1, 2, 3,]"#).unwrap();
+    let output = Command::new("./target/release/eq")
+        .args(&["(count)", "test_trailing_commas.edn"])
+        .output()
+        .expect("Failed to execute eq");
+    
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert_eq!(stdout.trim(), "3");
+    fs::remove_file("test_trailing_commas.edn").unwrap();
+    
+    // Test multiple consecutive commas
+    fs::write("test_multiple_commas.edn", r#"[1,, 2,,, 3]"#).unwrap();
+    let output = Command::new("./target/release/eq")
+        .args(&["(count)", "test_multiple_commas.edn"])
+        .output()
+        .expect("Failed to execute eq");
+    
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert_eq!(stdout.trim(), "3");
+    fs::remove_file("test_multiple_commas.edn").unwrap();
+}
+
+#[test]
 fn test_file_errors() {
     // Test non-existent file
     let output = Command::new("./target/release/eq")
