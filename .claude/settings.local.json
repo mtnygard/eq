@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cargo check:*)",
+      "Bash(cargo test)",
+      "Bash(sed:*)",
+      "Bash(cargo build:*)",
+      "Bash(./target/release/eq \".\" test_data.edn)",
+      "Bash(./target/release/eq:*)",
+      "Bash(cargo test:*)",
+      "Bash(rg:*)"
+    ],
+    "deny": []
+  }
+}
