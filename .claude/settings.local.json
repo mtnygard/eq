@@ -9,7 +9,12 @@
       "Bash(./target/release/eq:*)",
       "Bash(cargo test:*)",
       "Bash(rg:*)",
-      "Bash(cargo clean:*)"
+      "Bash(cargo clean:*)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:clojure.org)",
+      "Bash(git add:*)",
+      "Bash(git push:*)",
+      "Bash(cargo run:*)"
     ],
     "deny": []
   }

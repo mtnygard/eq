@@ -44,19 +44,33 @@ fn main() -> EqResult<()> {
     if args.null_input {
         // No input, just run filter on nil
         let result = vm.execute(&compiled_query, EdnValue::Nil)?;
-        println!("{}", format_output(&result, &output_config));
+        print_result(&result, &output_config, &args, None);
     } else if args.files.is_empty() {
         // Read from stdin
-        process_input(&mut vm, &compiled_query, &output_config, &args, io::stdin())?;
+        process_input(&mut vm, &compiled_query, &output_config, &args, io::stdin(), None)?;
     } else {
         // Process each file
         for file_path in &args.files {
             let file = fs::File::open(file_path)?;
-            process_input(&mut vm, &compiled_query, &output_config, &args, file)?;
+            let filename = file_path.to_string_lossy();
+            process_input(&mut vm, &compiled_query, &output_config, &args, file, Some(&filename))?;
         }
     }
     
     Ok(())
+}
+
+fn print_result(result: &EdnValue, output_config: &OutputConfig, args: &Args, filename: Option<&str>) {
+    let output = format_output(result, output_config);
+    if args.with_filename {
+        if let Some(fname) = filename {
+            println!("{}:{}", fname, output);
+        } else {
+            println!("(stdin):{}", output);
+        }
+    } else {
+        println!("{}", output);
+    }
 }
 
 fn process_input<R: Read>(
@@ -65,6 +79,7 @@ fn process_input<R: Read>(
     output_config: &OutputConfig,
     args: &Args,
     mut reader: R,
+    filename: Option<&str>,
 ) -> EqResult<()> {
     let mut input_string = String::new();
     reader.read_to_string(&mut input_string)?;
@@ -74,7 +89,7 @@ fn process_input<R: Read>(
         for line in input_string.lines() {
             let input_value = EdnValue::String(line.to_string());
             let result = vm.execute(compiled_query, input_value)?;
-            println!("{}", format_output(&result, output_config));
+            print_result(&result, output_config, args, filename);
         }
     } else if args.slurp {
         // Parse all values and put them in a vector
@@ -92,7 +107,7 @@ fn process_input<R: Read>(
         
         let input_array = EdnValue::Vector(values);
         let result = vm.execute(compiled_query, input_array)?;
-        println!("{}", format_output(&result, output_config));
+        print_result(&result, output_config, args, filename);
     } else {
         // Parse and process each top-level EDN value
         let remaining = input_string.as_str();
@@ -104,11 +119,11 @@ fn process_input<R: Read>(
             if matches!(value, EdnValue::Nil) && remaining.trim() == "nil" {
                 // Actually parsed nil
                 let result = vm.execute(compiled_query, value)?;
-                println!("{}", format_output(&result, output_config));
+                print_result(&result, output_config, args, filename);
                 break;
             } else if !matches!(value, EdnValue::Nil) {
                 let result = vm.execute(compiled_query, value)?;
-                println!("{}", format_output(&result, output_config));
+                print_result(&result, output_config, args, filename);
             }
             
             // This is a simplified approach - in a real implementation,
@@ -185,6 +200,7 @@ mod integration_tests {
             indent: 2,
             debug: false,
             verbose: false,
+            with_filename: false,
         };
         
         let mut vm = QueryVM::new();
@@ -197,7 +213,7 @@ mod integration_tests {
         
         // This would normally print, but we can't easily test that
         // In a real implementation, we'd refactor to return results
-        process_input(&mut vm, &compiled_query, &config, &args, cursor).unwrap();
+        process_input(&mut vm, &compiled_query, &config, &args, cursor, Some("test_input")).unwrap();
     }
 
     #[test]

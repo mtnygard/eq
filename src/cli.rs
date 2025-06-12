@@ -55,6 +55,10 @@ pub struct Args {
     /// Verbose output
     #[arg(short = 'v', long)]
     pub verbose: bool,
+    
+    /// Print filename for each output line (like grep -H)
+    #[arg(short = 'H', long)]
+    pub with_filename: bool,
 }
 
 #[cfg(test)]
@@ -89,5 +93,14 @@ mod tests {
         assert!(args.compact);
         assert!(args.raw_output);
         assert!(args.tab);
+    }
+    
+    #[test]
+    fn test_with_filename_flag() {
+        let args = Args::try_parse_from(&["eq", "-H", ".", "file1.edn"]).unwrap();
+        assert!(args.with_filename);
+        
+        let args = Args::try_parse_from(&["eq", "--with-filename", ".", "file1.edn"]).unwrap();
+        assert!(args.with_filename);
     }
 }
