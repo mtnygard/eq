@@ -1,5 +1,4 @@
 use indexmap::IndexMap;
-use smallvec::SmallVec;
 use std::collections::HashSet;
 use std::fmt;
 use std::hash::{Hash, Hasher};
@@ -48,11 +47,6 @@ impl EdnValue {
     /// Check if this value is truthy (everything except nil and false)
     pub fn is_truthy(&self) -> bool {
         !matches!(self, EdnValue::Nil | EdnValue::Bool(false))
-    }
-    
-    /// Check if this value is a collection
-    pub fn is_collection(&self) -> bool {
-        matches!(self, EdnValue::Vector(_) | EdnValue::List(_) | EdnValue::Map(_) | EdnValue::Set(_))
     }
     
     /// Get the count of elements in a collection

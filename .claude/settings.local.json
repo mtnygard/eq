@@ -8,7 +8,8 @@
       "Bash(./target/release/eq \".\" test_data.edn)",
       "Bash(./target/release/eq:*)",
       "Bash(cargo test:*)",
-      "Bash(rg:*)"
+      "Bash(rg:*)",
+      "Bash(cargo clean:*)"
     ],
     "deny": []
   }

@@ -27,11 +27,6 @@ pub enum EqError {
     #[error("Type error: expected {expected}, got {actual}")]
     TypeError { expected: String, actual: String },
     
-    #[error("Index out of bounds: {index} >= {length}")]
-    IndexError { index: usize, length: usize },
-    
-    #[error("Key not found: {key}")]
-    KeyError { key: String },
 }
 
 impl EqError {
@@ -46,13 +41,6 @@ impl EqError {
     pub fn query_error(message: impl Into<String>) -> Self {
         Self::QueryError {
             message: message.into(),
-        }
-    }
-    
-    pub fn runtime_error(context: impl Into<String>, source: impl std::error::Error + Send + Sync + 'static) -> Self {
-        Self::RuntimeError {
-            context: context.into(),
-            source: Box::new(source),
         }
     }
     

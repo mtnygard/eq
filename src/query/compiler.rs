@@ -1,14 +1,12 @@
 use super::ast::Expr;
 use crate::edn::EdnValue;
-use crate::error::{EqError, EqResult};
+use crate::error::EqResult;
 
 /// Bytecode operations for the query VM
 #[derive(Debug, Clone, PartialEq)]
 pub enum OpCode {
     // Stack operations
     Push(usize),              // Push constant at index
-    Pop,                      // Pop top value
-    Dup,                      // Duplicate top value
     
     // Basic operations
     Identity,                 // No-op, pass through input
@@ -52,7 +50,6 @@ pub enum OpCode {
     // Control flow
     Jump(usize),              // Unconditional jump to offset
     JumpIfFalse(usize),       // Jump if top of stack is falsy
-    JumpIfTrue(usize),        // Jump if top of stack is truthy
     
     // Aggregation
     Reduce,                   // Reduce collection (expects function and init on stack)
@@ -60,9 +57,6 @@ pub enum OpCode {
     GroupBy,                  // Group by function (expects function on stack)
     Frequencies,              // Count frequencies
     
-    // Function calls
-    Call(usize),              // Call function with arity
-    Return,                   // Return from function
 }
 
 /// Compiled query containing bytecode and constants
@@ -97,7 +91,6 @@ impl CompiledQuery {
         match &mut self.bytecode[offset] {
             OpCode::Jump(ref mut addr) => *addr = target,
             OpCode::JumpIfFalse(ref mut addr) => *addr = target,
-            OpCode::JumpIfTrue(ref mut addr) => *addr = target,
             _ => panic!("Attempted to patch non-jump instruction"),
         }
     }
@@ -306,9 +299,6 @@ impl Compiler {
                 self.query.emit(OpCode::Push(const_idx));
             }
             
-            Expr::Lambda(_params, _body) => {
-                return Err(EqError::query_error("Lambda expressions not yet implemented"));
-            }
         }
         
         Ok(())

@@ -2,7 +2,6 @@ use crate::edn::EdnValue;
 use crate::error::{EqError, EqResult};
 use crate::query::compiler::{CompiledQuery, OpCode};
 use indexmap::IndexMap;
-use std::collections::HashSet;
 
 /// Stack-based virtual machine for executing query bytecode
 pub struct QueryVM {
@@ -43,15 +42,6 @@ impl QueryVM {
                 self.stack.push(value);
             }
 
-            OpCode::Pop => {
-                self.stack.pop();
-            }
-
-            OpCode::Dup => {
-                if let Some(top) = self.stack.last() {
-                    self.stack.push(top.clone());
-                }
-            }
 
             OpCode::Identity => {
                 // No-op - value stays on stack
@@ -353,13 +343,6 @@ impl QueryVM {
                 }
             }
 
-            OpCode::JumpIfTrue(offset) => {
-                let condition = self.stack.pop().ok_or_else(|| EqError::runtime_error_str("jump-if-true", "Missing condition"))?;
-                if condition.is_truthy() {
-                    self.pc = *offset;
-                    return Ok(()); // Don't increment pc
-                }
-            }
 
             OpCode::Frequencies => {
                 let coll = self.stack.pop().ok_or_else(|| EqError::runtime_error_str("frequencies", "Missing collection"))?;
@@ -389,7 +372,7 @@ impl QueryVM {
             }
 
             // Placeholder implementations for unimplemented operations
-            OpCode::Reduce | OpCode::Apply | OpCode::GroupBy | OpCode::Call(_) | OpCode::Return => {
+            OpCode::Reduce | OpCode::Apply | OpCode::GroupBy => {
                 return Err(EqError::query_error(format!("Operation {:?} not yet implemented", op)));
             }
         }

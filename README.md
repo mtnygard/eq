@@ -351,4 +351,4 @@ Found a bug or want to add a feature? Contributions welcome!
 
 ## License
 
-MIT License
+Proprietary software. All rights reserved. See LICENSE file for details.

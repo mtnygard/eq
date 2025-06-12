@@ -360,9 +360,6 @@ impl Parser {
         true
     }
 
-    fn peek_prev_is_word_boundary(&self) -> bool {
-        self.position == 0 || !self.is_symbol_char(self.input[self.position - 1])
-    }
 
     fn skip_whitespace_and_comments(&mut self) {
         while !self.is_at_end() {

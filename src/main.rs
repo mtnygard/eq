@@ -10,7 +10,7 @@ mod vm;
 mod output;
 
 use cli::Args;
-use error::{EqError, EqResult};
+use error::EqResult;
 use edn::{EdnValue, Parser as EdnParser};
 use query::{QueryParser, compiler};
 use vm::QueryVM;

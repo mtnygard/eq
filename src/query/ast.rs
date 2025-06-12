@@ -69,51 +69,8 @@ pub enum Expr {
     // Literals
     Literal(EdnValue),                    // literal values
     
-    // Function composition
-    Lambda(Vec<String>, Box<Expr>),       // #(+ %1 %2) - anonymous functions
 }
 
-impl Expr {
-    /// Create a literal expression
-    pub fn literal(value: EdnValue) -> Self {
-        Expr::Literal(value)
-    }
-
-    /// Create a get expression from a key
-    pub fn get(key: EdnValue) -> Self {
-        Expr::Get(key)
-    }
-
-    /// Create a get-in expression from a path
-    pub fn get_in(path: Vec<EdnValue>) -> Self {
-        Expr::GetIn(path)
-    }
-
-    /// Create a keyword access expression
-    pub fn keyword(name: impl Into<String>) -> Self {
-        Expr::KeywordAccess(name.into())
-    }
-
-    /// Create a filter expression
-    pub fn filter(predicate: Expr) -> Self {
-        Expr::Filter(Box::new(predicate))
-    }
-
-    /// Create a map expression
-    pub fn map(func: Expr) -> Self {
-        Expr::Map(Box::new(func))
-    }
-
-    /// Create a thread-first expression
-    pub fn thread_first(exprs: Vec<Expr>) -> Self {
-        Expr::ThreadFirst(exprs)
-    }
-
-    /// Create a thread-last expression
-    pub fn thread_last(exprs: Vec<Expr>) -> Self {
-        Expr::ThreadLast(exprs)
-    }
-}
 
 #[cfg(test)]
 mod tests {
@@ -124,28 +81,28 @@ mod tests {
         let identity = Expr::Identity;
         assert_eq!(identity, Expr::Identity);
 
-        let get_expr = Expr::get(EdnValue::Keyword("name".to_string()));
+        let get_expr = Expr::Get(EdnValue::Keyword("name".to_string()));
         assert_eq!(get_expr, Expr::Get(EdnValue::Keyword("name".to_string())));
 
-        let keyword_expr = Expr::keyword("age");
+        let keyword_expr = Expr::KeywordAccess("age".to_string());
         assert_eq!(keyword_expr, Expr::KeywordAccess("age".to_string()));
     }
 
     #[test]
     fn test_complex_expressions() {
-        let filter_expr = Expr::filter(Expr::IsNumber);
+        let filter_expr = Expr::Filter(Box::new(Expr::IsNumber));
         assert_eq!(filter_expr, Expr::Filter(Box::new(Expr::IsNumber)));
 
-        let map_expr = Expr::map(Expr::keyword("name"));
+        let map_expr = Expr::Map(Box::new(Expr::KeywordAccess("name".to_string())));
         assert_eq!(map_expr, Expr::Map(Box::new(Expr::KeywordAccess("name".to_string()))));
     }
 
     #[test]
     fn test_threading_expressions() {
-        let thread_first = Expr::thread_first(vec![
+        let thread_first = Expr::ThreadFirst(vec![
             Expr::Identity,
             Expr::First,
-            Expr::keyword("name")
+            Expr::KeywordAccess("name".to_string())
         ]);
         
         match thread_first {
