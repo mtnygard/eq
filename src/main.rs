@@ -93,13 +93,19 @@ fn main() -> EqResult<()> {
         // No input, just run filter on nil
         let result = vm.execute(&compiled_query, EdnValue::Nil)?;
         print_result(&result, &output_config, &args, None);
-    } else if args.files.is_empty() {
+    } else if args.files.is_empty() && !args.recursive {
         // Read from stdin
         process_input(&mut vm, &compiled_query, &output_config, &args, io::stdin(), None)?;
     } else {
         // Check if we need to do recursive file finding
         let files_to_process = if args.files.iter().any(|p| p.is_dir()) || args.recursive {
-            find_files_recursive(&args.files, &args.glob_pattern, args.recursive)?
+            // If recursive flag is set but no files specified, search current directory
+            let search_paths = if args.files.is_empty() && args.recursive {
+                vec![PathBuf::from(".")]
+            } else {
+                args.files.clone()
+            };
+            find_files_recursive(&search_paths, &args.glob_pattern, args.recursive)?
         } else {
             args.files.clone()
         };
@@ -165,25 +171,24 @@ fn process_input<R: Read>(
         print_result(&result, output_config, args, filename);
     } else {
         // Parse and process each top-level EDN value
-        let remaining = input_string.as_str();
+        let mut parser = EdnParser::new(&input_string);
         
-        while !remaining.trim().is_empty() {
-            let mut parser = EdnParser::new(remaining);
+        loop {
             let value = parser.parse()?;
             
-            if matches!(value, EdnValue::Nil) && remaining.trim() == "nil" {
-                // Actually parsed nil
-                let result = vm.execute(compiled_query, value)?;
-                print_result(&result, output_config, args, filename);
+            // Check if we've reached the end of input
+            if matches!(value, EdnValue::Nil) && parser.remaining_input().trim().is_empty() {
                 break;
-            } else if !matches!(value, EdnValue::Nil) {
-                let result = vm.execute(compiled_query, value)?;
-                print_result(&result, output_config, args, filename);
             }
             
-            // This is a simplified approach - in a real implementation,
-            // we'd need to track the parser position to know how much to advance
-            break;
+            // Process the parsed value
+            let result = vm.execute(compiled_query, value)?;
+            print_result(&result, output_config, args, filename);
+            
+            // Check if there's more to parse
+            if parser.remaining_input().trim().is_empty() {
+                break;
+            }
         }
     }
     

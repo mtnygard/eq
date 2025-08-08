@@ -14,7 +14,12 @@
       "WebFetch(domain:clojure.org)",
       "Bash(git add:*)",
       "Bash(git push:*)",
-      "Bash(cargo run:*)"
+      "Bash(cargo run:*)",
+      "Bash(rm:*)",
+      "Bash(git commit:*)",
+      "Bash(mkdir:*)",
+      "Bash(timeout:*)",
+      "Bash(echo:*)"
     ],
     "deny": []
   }

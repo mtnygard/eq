@@ -28,6 +28,10 @@ impl Parser {
         }
         self.parse_value()
     }
+    
+    pub fn remaining_input(&self) -> String {
+        self.input[self.position..].iter().collect()
+    }
 
     fn parse_value(&mut self) -> EqResult<EdnValue> {
         self.skip_whitespace_and_comments();
