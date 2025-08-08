@@ -21,6 +21,8 @@ thiserror = "1.0"
 indexmap = "2.0"
 smallvec = "1.11"
 bstr = "1.6"
+walkdir = "2.4"
+glob = "0.3"
 
 [dev-dependencies]
 criterion = "0.5"

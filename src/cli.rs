@@ -17,7 +17,7 @@ pub struct Args {
     pub compact: bool,
     
     /// Output raw strings, not EDN strings
-    #[arg(short = 'r', long)]
+    #[arg(long)]
     pub raw_output: bool,
     
     /// Each line of input is a string, not parsed as EDN
@@ -59,6 +59,14 @@ pub struct Args {
     /// Print filename for each output line (like grep -H)
     #[arg(short = 'H', long)]
     pub with_filename: bool,
+    
+    /// Recursively search directories for files
+    #[arg(short = 'r', long = "recursive")]
+    pub recursive: bool,
+    
+    /// Glob pattern for file matching (default: "*.edn")
+    #[arg(short = 'p', long = "pattern", default_value = "*.edn")]
+    pub glob_pattern: String,
 }
 
 #[cfg(test)]
@@ -89,7 +97,7 @@ mod tests {
     
     #[test]
     fn test_flags() {
-        let args = Args::try_parse_from(&["eq", "-c", "-r", "--tab", "."]).unwrap();
+        let args = Args::try_parse_from(&["eq", "-c", "--raw-output", "--tab", "."]).unwrap();
         assert!(args.compact);
         assert!(args.raw_output);
         assert!(args.tab);
@@ -102,5 +110,29 @@ mod tests {
         
         let args = Args::try_parse_from(&["eq", "--with-filename", ".", "file1.edn"]).unwrap();
         assert!(args.with_filename);
+    }
+    
+    #[test]
+    fn test_recursive_flag() {
+        let args = Args::try_parse_from(&["eq", "-r", ".", "dir/"]).unwrap();
+        assert!(args.recursive);
+        
+        let args = Args::try_parse_from(&["eq", "--recursive", ".", "dir/"]).unwrap();
+        assert!(args.recursive);
+    }
+    
+    #[test]
+    fn test_glob_pattern() {
+        // Test default value
+        let args = Args::try_parse_from(&["eq", "."]).unwrap();
+        assert_eq!(args.glob_pattern, "*.edn");
+        
+        // Test custom value with short form
+        let args = Args::try_parse_from(&["eq", "-p", "*.json", "."]).unwrap();
+        assert_eq!(args.glob_pattern, "*.json");
+        
+        // Test custom value with long form
+        let args = Args::try_parse_from(&["eq", "--pattern", "*.json", "."]).unwrap();
+        assert_eq!(args.glob_pattern, "*.json");
     }
 }

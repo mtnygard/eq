@@ -27,6 +27,11 @@ pub enum EqError {
     #[error("Type error: expected {expected}, got {actual}")]
     TypeError { expected: String, actual: String },
     
+    #[error("Glob pattern error: {0}")]
+    GlobError(#[from] glob::PatternError),
+    
+    #[error("WalkDir error: {0}")]
+    WalkDirError(#[from] walkdir::Error),
 }
 
 impl EqError {

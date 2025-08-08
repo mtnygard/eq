@@ -1,6 +1,9 @@
 use clap::Parser;
 use std::io::{self, Read};
 use std::fs;
+use std::path::PathBuf;
+use walkdir::WalkDir;
+use glob::Pattern;
 
 mod cli;
 mod edn;
@@ -15,6 +18,51 @@ use edn::{EdnValue, Parser as EdnParser};
 use query::{QueryParser, compiler};
 use vm::QueryVM;
 use output::{OutputConfig, format_output};
+
+fn find_files_recursive(paths: &[PathBuf], pattern: &str, recursive: bool) -> EqResult<Vec<PathBuf>> {
+    let glob_pattern = Pattern::new(pattern)?;
+    let mut files = Vec::new();
+    
+    for path in paths {
+        if path.is_file() {
+            // If it's a file, just add it directly
+            files.push(path.clone());
+        } else if path.is_dir() {
+            if recursive {
+                // Walk the directory tree
+                for entry in WalkDir::new(path).follow_links(true) {
+                    let entry = entry?;
+                    if entry.file_type().is_file() {
+                        if let Some(file_name) = entry.path().file_name() {
+                            if let Some(file_name_str) = file_name.to_str() {
+                                if glob_pattern.matches(file_name_str) {
+                                    files.push(entry.path().to_path_buf());
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                // Just look at immediate children
+                for entry in fs::read_dir(path)? {
+                    let entry = entry?;
+                    let path = entry.path();
+                    if path.is_file() {
+                        if let Some(file_name) = path.file_name() {
+                            if let Some(file_name_str) = file_name.to_str() {
+                                if glob_pattern.matches(file_name_str) {
+                                    files.push(path);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    Ok(files)
+}
 
 fn main() -> EqResult<()> {
     let args = Args::parse();
@@ -49,8 +97,15 @@ fn main() -> EqResult<()> {
         // Read from stdin
         process_input(&mut vm, &compiled_query, &output_config, &args, io::stdin(), None)?;
     } else {
+        // Check if we need to do recursive file finding
+        let files_to_process = if args.files.iter().any(|p| p.is_dir()) || args.recursive {
+            find_files_recursive(&args.files, &args.glob_pattern, args.recursive)?
+        } else {
+            args.files.clone()
+        };
+        
         // Process each file
-        for file_path in &args.files {
+        for file_path in &files_to_process {
             let file = fs::File::open(file_path)?;
             let filename = file_path.to_string_lossy();
             process_input(&mut vm, &compiled_query, &output_config, &args, file, Some(&filename))?;
@@ -201,6 +256,8 @@ mod integration_tests {
             debug: false,
             verbose: false,
             with_filename: false,
+            recursive: false,
+            glob_pattern: "*.edn".to_string(),
         };
         
         let mut vm = QueryVM::new();
@@ -236,5 +293,47 @@ mod integration_tests {
         
         let result = vm.execute(&compiled_query, input).unwrap();
         assert_eq!(format_output(&result, &config), "\"Alice\"");
+    }
+    
+    #[test]
+    fn test_find_files_recursive() {
+        use std::fs;
+        use std::env;
+        
+        // Create a temporary directory structure for testing
+        let temp_dir = env::temp_dir().join("eq_test_recursive");
+        let _ = fs::remove_dir_all(&temp_dir); // Clean up if exists
+        fs::create_dir_all(&temp_dir).unwrap();
+        
+        // Create test files
+        fs::write(temp_dir.join("test1.edn"), "{}").unwrap();
+        fs::write(temp_dir.join("test2.edn"), "[]").unwrap();
+        fs::write(temp_dir.join("other.json"), "{}").unwrap();
+        
+        // Create subdirectory with more files
+        let sub_dir = temp_dir.join("subdir");
+        fs::create_dir_all(&sub_dir).unwrap();
+        fs::write(sub_dir.join("test3.edn"), "nil").unwrap();
+        fs::write(sub_dir.join("test4.json"), "{}").unwrap();
+        
+        // Test non-recursive with *.edn pattern
+        let files = find_files_recursive(&vec![temp_dir.clone()], "*.edn", false).unwrap();
+        assert_eq!(files.len(), 2); // Should find test1.edn and test2.edn
+        
+        // Test recursive with *.edn pattern
+        let files = find_files_recursive(&vec![temp_dir.clone()], "*.edn", true).unwrap();
+        assert_eq!(files.len(), 3); // Should find test1.edn, test2.edn, and test3.edn
+        
+        // Test recursive with *.json pattern
+        let files = find_files_recursive(&vec![temp_dir.clone()], "*.json", true).unwrap();
+        assert_eq!(files.len(), 2); // Should find other.json and test4.json
+        
+        // Test with direct file path
+        let direct_file = temp_dir.join("test1.edn");
+        let files = find_files_recursive(&vec![direct_file], "*.edn", false).unwrap();
+        assert_eq!(files.len(), 1); // Should return the file itself
+        
+        // Clean up
+        let _ = fs::remove_dir_all(&temp_dir);
     }
 }

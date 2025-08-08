@@ -87,7 +87,7 @@ fn test_raw_output() {
     
     // Test raw string output
     let output = Command::new("./target/release/eq")
-        .args(&["-r", ":message", "test_raw.edn"])
+        .args(&["--raw-output", ":message", "test_raw.edn"])
         .output()
         .expect("Failed to execute eq");
     
@@ -455,15 +455,16 @@ fn test_file_errors() {
     let stderr = String::from_utf8(output.stderr).unwrap();
     assert!(stderr.contains("No such file") || stderr.contains("not found"));
     
-    // Test directory instead of file
+    // Test directory instead of file - should now succeed but produce no output
+    let _ = fs::remove_dir("test_dir"); // Clean up if exists from previous run
     fs::create_dir("test_dir").unwrap();
     let output = Command::new("./target/release/eq")
         .args(&[".", "test_dir"])
         .output()
         .expect("Failed to execute eq");
     
-    assert!(!output.status.success());
-    let stderr = String::from_utf8(output.stderr).unwrap();
-    assert!(stderr.contains("directory") || stderr.contains("Invalid"));
+    // Empty directory should succeed but produce no output
+    assert!(output.status.success());
+    assert!(output.stdout.is_empty());
     fs::remove_dir("test_dir").unwrap();
 }
