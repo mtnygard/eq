@@ -444,11 +444,13 @@ impl Parser {
     fn parse_number(&mut self) -> EqResult<EdnValue> {
         let start_pos = self.position;
         let mut has_dot = false;
+        let mut has_exponent = false;
         
         if self.peek() == '-' {
             self.advance();
         }
         
+        // Parse the main number part (before exponent)
         while !self.is_at_end() && (self.peek().is_ascii_digit() || self.peek() == '.') {
             if self.peek() == '.' {
                 if has_dot {
@@ -459,9 +461,40 @@ impl Parser {
             self.advance();
         }
         
+        // Check for scientific notation (e or E)
+        if !self.is_at_end() && (self.peek() == 'e' || self.peek() == 'E') {
+            has_exponent = true;
+            self.advance(); // consume 'e' or 'E'
+            
+            // Handle optional sign in exponent
+            if !self.is_at_end() && (self.peek() == '+' || self.peek() == '-') {
+                self.advance();
+            }
+            
+            // Parse exponent digits
+            if !self.is_at_end() && self.peek().is_ascii_digit() {
+                while !self.is_at_end() && self.peek().is_ascii_digit() {
+                    self.advance();
+                }
+            } else {
+                // Invalid exponent format - backtrack to before 'e'/'E'
+                self.position = start_pos;
+                while !self.is_at_end() && (self.peek().is_ascii_digit() || self.peek() == '.') {
+                    if self.peek() == '.' {
+                        if has_dot {
+                            break;
+                        }
+                        has_dot = true;
+                    }
+                    self.advance();
+                }
+                has_exponent = false;
+            }
+        }
+        
         let number_str: String = self.input[start_pos..self.position].iter().collect();
         
-        if has_dot {
+        if has_dot || has_exponent {
             number_str.parse::<f64>()
                 .map(EdnValue::Float)
                 .map_err(|_| EqError::parse_error(
@@ -823,6 +856,25 @@ mod tests {
         
         let mut parser = Parser::new("-2.5");
         assert_eq!(parser.parse().unwrap(), EdnValue::Float(-2.5));
+        
+        // Scientific notation tests
+        let mut parser = Parser::new("5.0E-4");
+        assert_eq!(parser.parse().unwrap(), EdnValue::Float(5.0E-4));
+        
+        let mut parser = Parser::new("5.0e-4");
+        assert_eq!(parser.parse().unwrap(), EdnValue::Float(5.0e-4));
+        
+        let mut parser = Parser::new("1.23E10");
+        assert_eq!(parser.parse().unwrap(), EdnValue::Float(1.23E10));
+        
+        let mut parser = Parser::new("1E5");
+        assert_eq!(parser.parse().unwrap(), EdnValue::Float(1E5));
+        
+        let mut parser = Parser::new("-3.14E+2");
+        assert_eq!(parser.parse().unwrap(), EdnValue::Float(-3.14E+2));
+        
+        let mut parser = Parser::new("2e3");
+        assert_eq!(parser.parse().unwrap(), EdnValue::Float(2e3));
     }
 
     #[test]
