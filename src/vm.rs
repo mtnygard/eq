@@ -275,6 +275,44 @@ impl QueryVM {
                 }
             }
 
+            OpCode::Select => {
+                let predicate_query = self.stack.pop().ok_or_else(|| EqError::runtime_error_str("select", "Missing predicate query"))?;
+                let input = self.stack.pop().ok_or_else(|| EqError::runtime_error_str("select", "Missing input"))?;
+                
+                // Create a new VM to execute the predicate
+                if let EdnValue::CompiledQuery(ref predicate_compiled) = predicate_query {
+                    let mut predicate_vm = QueryVM::new();
+                    let predicate_result = predicate_vm.execute(predicate_compiled, input.clone())?;
+                    
+                    // Check if the predicate result is truthy
+                    let is_truthy = match predicate_result {
+                        EdnValue::Nil => false,
+                        EdnValue::Bool(b) => b,
+                        _ => true, // All other values are truthy
+                    };
+                    
+                    if is_truthy {
+                        self.stack.push(input); // Return the original input
+                    } else {
+                        self.stack.push(EdnValue::Nil); // Return nil for falsy predicates
+                    }
+                } else {
+                    // If predicate is not a compiled query, treat it as a literal value
+                    // and check truthiness directly
+                    let is_truthy = match predicate_query {
+                        EdnValue::Nil => false,
+                        EdnValue::Bool(b) => b,
+                        _ => true,
+                    };
+                    
+                    if is_truthy {
+                        self.stack.push(input);
+                    } else {
+                        self.stack.push(EdnValue::Nil);
+                    }
+                }
+            }
+
             OpCode::IsNil => {
                 let value = self.stack.pop().ok_or_else(|| EqError::runtime_error_str("nil?", "Missing value"))?;
                 let result = matches!(value, EdnValue::Nil);
@@ -324,9 +362,9 @@ impl QueryVM {
             }
 
             OpCode::Equal => {
-                let expected = self.stack.pop().ok_or_else(|| EqError::runtime_error_str("=", "Missing expected value"))?;
-                let actual = self.stack.pop().ok_or_else(|| EqError::runtime_error_str("=", "Missing actual value"))?;
-                let result = actual == expected;
+                let right = self.stack.pop().ok_or_else(|| EqError::runtime_error_str("=", "Missing right operand"))?;
+                let left = self.stack.pop().ok_or_else(|| EqError::runtime_error_str("=", "Missing left operand"))?;
+                let result = left == right;
                 self.stack.push(EdnValue::Bool(result));
             }
 
@@ -519,7 +557,10 @@ mod tests {
         
         // Test equality
         let query = compiler::compile(
-            crate::query::ast::Expr::Equal(Box::new(crate::query::ast::Expr::Literal(EdnValue::Integer(42))))
+            crate::query::ast::Expr::Equal(
+                Box::new(crate::query::ast::Expr::Identity),
+                Box::new(crate::query::ast::Expr::Literal(EdnValue::Integer(42)))
+            )
         ).unwrap();
         
         let result = vm.execute(&query, EdnValue::Integer(42)).unwrap();

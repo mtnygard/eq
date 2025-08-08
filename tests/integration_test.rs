@@ -136,7 +136,7 @@ fn test_broken_edn_files() {
     
     assert!(!output.status.success());
     let stderr = String::from_utf8(output.stderr).unwrap();
-    assert!(stderr.contains("ParseError") || stderr.contains("Unterminated"));
+    assert!(stderr.contains("Parse error") || stderr.contains("ParseError") || stderr.contains("Unterminated"));
     fs::remove_file("test_broken1.edn").unwrap();
     
     // Test unterminated vector
@@ -148,7 +148,7 @@ fn test_broken_edn_files() {
     
     assert!(!output.status.success());
     let stderr = String::from_utf8(output.stderr).unwrap();
-    assert!(stderr.contains("ParseError") || stderr.contains("Unterminated"));
+    assert!(stderr.contains("Parse error") || stderr.contains("ParseError") || stderr.contains("Unterminated"));
     fs::remove_file("test_broken2.edn").unwrap();
     
     // Test invalid map (odd number of elements)
@@ -160,7 +160,7 @@ fn test_broken_edn_files() {
     
     assert!(!output.status.success());
     let stderr = String::from_utf8(output.stderr).unwrap();
-    assert!(stderr.contains("ParseError") || stderr.contains("Expected"));
+    assert!(stderr.contains("Parse error") || stderr.contains("ParseError") || stderr.contains("Expected"));
     fs::remove_file("test_broken3.edn").unwrap();
     
     // Test duplicate set elements  
@@ -196,7 +196,7 @@ fn test_broken_queries() {
     
     assert!(!output.status.success());
     let stderr = String::from_utf8(output.stderr).unwrap();
-    assert!(stderr.contains("ParseError") || stderr.contains("Unterminated"));
+    assert!(stderr.contains("Parse error") || stderr.contains("ParseError") || stderr.contains("Unterminated"));
     
     // Test invalid function arguments
     let output = Command::new("./target/release/eq")

@@ -61,6 +61,7 @@ impl QueryParser {
             "map" => Self::parse_unary("map", args, Expr::Map),
             "remove" => Self::parse_unary("remove", args, Expr::Remove),
             "select-keys" => Self::parse_select_keys(args),
+            "select" => Self::parse_unary("select", args, Expr::Select),
             
             // Predicates
             "nil?" => Self::parse_nullary("nil?", args, Expr::IsNil),
@@ -72,7 +73,7 @@ impl QueryParser {
             "contains?" => Self::parse_unary("contains?", args, Expr::Contains),
             
             // Comparison
-            "=" => Self::parse_unary("=", args, Expr::Equal),
+            "=" => Self::parse_binary("=", args, Expr::Equal),
             "<" => Self::parse_unary("<", args, Expr::LessThan),
             ">" => Self::parse_unary(">", args, Expr::GreaterThan),
             "<=" => Self::parse_unary("<=", args, Expr::LessEqual),
@@ -113,6 +114,18 @@ impl QueryParser {
         }
         let arg_expr = Self::edn_to_expr(args[0].clone())?;
         Ok(constructor(Box::new(arg_expr)))
+    }
+
+    fn parse_binary<F>(name: &str, args: &[EdnValue], constructor: F) -> EqResult<Expr>
+    where
+        F: FnOnce(Box<Expr>, Box<Expr>) -> Expr,
+    {
+        if args.len() != 2 {
+            return Err(EqError::query_error(format!("{} takes exactly two arguments", name)));
+        }
+        let left_expr = Self::edn_to_expr(args[0].clone())?;
+        let right_expr = Self::edn_to_expr(args[1].clone())?;
+        Ok(constructor(Box::new(left_expr), Box::new(right_expr)))
     }
 
     fn parse_get(args: &[EdnValue]) -> EqResult<Expr> {

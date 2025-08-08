@@ -2,6 +2,7 @@ use indexmap::IndexMap;
 use std::collections::HashSet;
 use std::fmt;
 use std::hash::{Hash, Hasher};
+use crate::query::compiler::CompiledQuery;
 
 /// EDN value types with zero-copy string optimization
 #[derive(Debug, Clone, PartialEq)]
@@ -28,6 +29,7 @@ pub enum EdnValue {
     },
     Instant(String), // ISO 8601 timestamp string
     Uuid(String),    // UUID string
+    CompiledQuery(CompiledQuery), // For internal use - compiled query objects
 }
 
 impl EdnValue {
@@ -50,6 +52,7 @@ impl EdnValue {
             EdnValue::WithMetadata { .. } => "with-metadata",
             EdnValue::Instant(_) => "instant",
             EdnValue::Uuid(_) => "uuid",
+            EdnValue::CompiledQuery(_) => "compiled-query",
         }
     }
     
@@ -155,6 +158,10 @@ impl Hash for EdnValue {
             }
             EdnValue::Instant(s) => s.hash(state),
             EdnValue::Uuid(s) => s.hash(state),
+            EdnValue::CompiledQuery(_) => {
+                // For hashing, we'll use a constant since queries are internal
+                "compiled-query".hash(state);
+            }
         }
     }
 }
@@ -216,6 +223,7 @@ impl fmt::Display for EdnValue {
             EdnValue::WithMetadata { metadata, value } => write!(f, "^{} {}", metadata, value),
             EdnValue::Instant(s) => write!(f, "#inst \"{}\"", s),
             EdnValue::Uuid(s) => write!(f, "#uuid \"{}\"", s),
+            EdnValue::CompiledQuery(_) => write!(f, "#compiled-query"),
         }
     }
 }

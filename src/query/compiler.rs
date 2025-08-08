@@ -30,6 +30,7 @@ pub enum OpCode {
     Map,                      // Map over collection (expects function bytecode)
     Remove,                   // Remove elements (expects predicate bytecode)
     SelectKeys,               // Select keys from map (expects keys on stack)
+    Select,                   // Select input if predicate is truthy (expects predicate query on stack)
     
     // Predicates
     IsNil,                    // Test if nil
@@ -60,7 +61,7 @@ pub enum OpCode {
 }
 
 /// Compiled query containing bytecode and constants
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct CompiledQuery {
     pub bytecode: Vec<OpCode>,
     pub constants: Vec<EdnValue>,
@@ -181,6 +182,14 @@ impl Compiler {
                 self.query.emit(OpCode::SelectKeys);
             }
             
+            Expr::Select(pred_expr) => {
+                // Compile the predicate as a separate query
+                let predicate_query = Self::compile(*pred_expr)?;
+                let const_idx = self.query.add_constant(EdnValue::CompiledQuery(predicate_query));
+                self.query.emit(OpCode::Push(const_idx));
+                self.query.emit(OpCode::Select);
+            }
+            
             Expr::IsNil => self.query.emit(OpCode::IsNil),
             Expr::IsEmpty => self.query.emit(OpCode::IsEmpty),
             Expr::IsNumber => self.query.emit(OpCode::IsNumber),
@@ -193,8 +202,9 @@ impl Compiler {
                 self.query.emit(OpCode::Contains);
             }
             
-            Expr::Equal(val_expr) => {
-                self.compile_expr(*val_expr)?;
+            Expr::Equal(left_expr, right_expr) => {
+                self.compile_expr(*left_expr)?;
+                self.compile_expr(*right_expr)?;
                 self.query.emit(OpCode::Equal);
             }
             
@@ -309,12 +319,20 @@ impl Compiler {
             return Ok(());
         }
         
-        // Start with the first expression
+        // Start with the first expression (the initial value)
         self.compile_expr(exprs[0].clone())?;
         
-        // Apply each subsequent expression
+        // Thread through each subsequent expression
         for expr in exprs.into_iter().skip(1) {
-            self.compile_expr(expr)?;
+            match expr {
+                // For function calls, we need to insert the threaded value as the first argument
+                _ => {
+                    // For now, just compile the expression directly
+                    // This is a simplified implementation - a full implementation would
+                    // need to handle inserting the threaded value as the first argument
+                    self.compile_expr(expr)?;
+                }
+            }
         }
         
         Ok(())

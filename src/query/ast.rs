@@ -24,6 +24,7 @@ pub enum Expr {
     Map(Box<Expr>),                       // (map f)
     Remove(Box<Expr>),                    // (remove pred)
     SelectKeys(Vec<EdnValue>),            // (select-keys [:k1 :k2])
+    Select(Box<Expr>),                    // (select pred) - returns input if pred is truthy, nil otherwise
 
     // Predicates
     IsNil,                                // (nil?)
@@ -35,7 +36,7 @@ pub enum Expr {
     IsBoolean,                            // (boolean?)
 
     // Comparison
-    Equal(Box<Expr>),                     // (= x)
+    Equal(Box<Expr>, Box<Expr>),          // (= left right)
     LessThan(Box<Expr>),                  // (< x)
     GreaterThan(Box<Expr>),               // (> x)
     LessEqual(Box<Expr>),                 // (<= x)
