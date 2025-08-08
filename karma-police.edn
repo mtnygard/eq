@@ -1,0 +1,61 @@
+{:name :karma-police
+ :description "Service responsible for attributing reputation and trustworthiness of client devices"
+ :overrides
+ {:staging
+  {:all {:nu-env-config {:all {"crl-mode" "dhi"}}}}}
+ :datastores
+ {:s3
+  {:buckets
+   [{:config-key "s3-bucket",
+     :bucket-name "nu-karma-police",
+     :env-attached? true,
+     :country-attached? true}
+    {:config-key "device-map-bucket"
+     :bucket-name "nu-device-map"
+     :env-attached? true
+     :country-attached? true}]}
+  :redis
+  {:clusters
+   [{:config-key "ratelimit_redis_host" :cluster-name "rtlimit"}]}
+  :datomic
+  {:databases
+   [{:config-key "datomic_uri"
+     :transactor "karma-police"
+     :name "karma-police"}]}
+  :kafka {:enabled? true}}
+ :deprecated
+ {:datomic_memcached true :config {} :kafka true :type :jetty}
+ :environments
+ {:staging #nu/prototypes-for [:staging :sharded]
+  :prod #nu/prototypes-for [:prod :sharded]}
+ :aware-of-shards :sharded+global
+ :jvm {:gc-strategy :g1 :flags ["-XX:-OmitStackTraceInFastThrow"]
+       :heap-proportion 0.75}
+ :pipelines
+ #{{:type :service-config}
+   {:type :clojure-service
+    :test-frameworks #{:midje}
+    :multiarch true
+    :cdc-test-frameworks #{:sachem}
+    :prod {:promotion :automatic}}}
+ :scaling {:size 1, :min-size 1, :max-size 8, :triggers {:cpu {:target 60}}},
+ :squad :fraud-app-access
+ :right-sizing {:cpu {:xform-params {:core/min-value 2}}}
+ :tier :critical
+ :ingress
+ {:ports
+  [{:name "443to4445"
+    :host-port 4445
+    :host-protocol :tcp
+    :port 443
+    :protocol :tcp}]
+  :load-balancer {:type :network, :visibility :internet-facing}
+  :type :internet-facing
+  :proxy-protocol? true
+  :pkix-trust-store "worldwide/bpo+nubanker+service+third-party"}
+ :workload
+ {:requests {:cpu 2.0 :memory-gib 4.0}
+  :limits {:cpu 2.0 :memory-gib 4.0}}
+ :tags {:business-domain "fraud"
+        :business-subdomain "fraud-app-access"}
+ :rollouts #{:flock}}

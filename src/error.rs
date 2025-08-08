@@ -4,8 +4,9 @@ pub type EqResult<T> = Result<T, EqError>;
 
 #[derive(Error, Debug)]
 pub enum EqError {
-    #[error("Parse error at line {line}, column {column}: {message}")]
+    #[error("Parse error{} at line {line}, column {column}: {message}", if let Some(file) = filename { format!(" in file '{}'", file) } else { String::new() })]
     ParseError {
+        filename: Option<String>,
         line: usize,
         column: usize,
         message: String,
@@ -35,8 +36,9 @@ pub enum EqError {
 }
 
 impl EqError {
-    pub fn parse_error(line: usize, column: usize, message: impl Into<String>) -> Self {
+    pub fn parse_error_with_file(filename: Option<String>, line: usize, column: usize, message: impl Into<String>) -> Self {
         Self::ParseError {
+            filename,
             line,
             column,
             message: message.into(),

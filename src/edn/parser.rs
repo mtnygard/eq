@@ -9,6 +9,7 @@ pub struct Parser {
     position: usize,
     line: usize,
     column: usize,
+    filename: Option<String>,
 }
 
 impl Parser {
@@ -18,14 +19,34 @@ impl Parser {
             position: 0,
             line: 1,
             column: 1,
+            filename: None,
+        }
+    }
+    
+    pub fn new_with_filename(input: &str, filename: Option<String>) -> Self {
+        Self {
+            input: input.chars().collect(),
+            position: 0,
+            line: 1,
+            column: 1,
+            filename,
         }
     }
 
     pub fn parse(&mut self) -> EqResult<EdnValue> {
         self.skip_whitespace_and_comments();
+        
+        // Handle top-level discards
+        while !self.is_at_end() && self.peek() == '#' && self.peek_ahead(1) == Some('_') {
+            self.advance(); // consume '#'
+            self.consume_discard()?;
+            self.skip_whitespace_and_comments();
+        }
+        
         if self.is_at_end() {
             return Ok(EdnValue::Nil);
         }
+        
         self.parse_value()
     }
     
@@ -36,8 +57,15 @@ impl Parser {
     fn parse_value(&mut self) -> EqResult<EdnValue> {
         self.skip_whitespace_and_comments();
         
+        // Handle discards that appear where a value is expected
+        while !self.is_at_end() && self.peek() == '#' && self.peek_ahead(1) == Some('_') {
+            self.advance(); // consume '#'
+            self.consume_discard()?;
+            self.skip_whitespace_and_comments();
+        }
+        
         if self.is_at_end() {
-            return Err(EqError::parse_error(self.line, self.column, "Unexpected end of input"));
+            return Err(EqError::parse_error_with_file(self.filename.clone(), self.line, self.column, "Unexpected end of input"));
         }
 
         let ch = self.peek();
@@ -62,7 +90,7 @@ impl Parser {
                 }
             }
             _ if ch.is_alphabetic() || "+-*/_!?$%&=<>.-".contains(ch) => self.parse_symbol(),
-            _ => Err(EqError::parse_error(
+            _ => Err(EqError::parse_error_with_file(self.filename.clone(),
                 self.line,
                 self.column,
                 format!("Unexpected character: '{}'", ch),
@@ -96,7 +124,7 @@ impl Parser {
             if self.peek() == '\\' {
                 self.advance(); // consume backslash
                 if self.is_at_end() {
-                    return Err(EqError::parse_error(self.line, self.column, "Unterminated string escape"));
+                    return Err(EqError::parse_error_with_file(self.filename.clone(), self.line, self.column, "Unterminated string escape"));
                 }
                 match self.peek() {
                     '"' => value.push('"'),
@@ -112,7 +140,7 @@ impl Parser {
                         continue; // Skip the advance() at the end of the loop
                     }
                     c => {
-                        return Err(EqError::parse_error(
+                        return Err(EqError::parse_error_with_file(self.filename.clone(),
                             self.line,
                             self.column,
                             format!("Invalid escape sequence: \\{}", c),
@@ -127,7 +155,7 @@ impl Parser {
         }
         
         if self.is_at_end() {
-            return Err(EqError::parse_error(self.line, self.column, "Unterminated string"));
+            return Err(EqError::parse_error_with_file(self.filename.clone(), self.line, self.column, "Unterminated string"));
         }
         
         self.advance(); // consume closing quote
@@ -138,7 +166,7 @@ impl Parser {
         self.advance(); // consume ':'
         let name = self.read_symbol_name();
         if name.is_empty() {
-            return Err(EqError::parse_error(self.line, self.column, "Empty keyword"));
+            return Err(EqError::parse_error_with_file(self.filename.clone(), self.line, self.column, "Empty keyword"));
         }
         Ok(EdnValue::Keyword(name))
     }
@@ -146,7 +174,7 @@ impl Parser {
     fn parse_character(&mut self) -> EqResult<EdnValue> {
         self.advance(); // consume '\'
         if self.is_at_end() {
-            return Err(EqError::parse_error(self.line, self.column, "Incomplete character literal"));
+            return Err(EqError::parse_error_with_file(self.filename.clone(), self.line, self.column, "Incomplete character literal"));
         }
         
         // Check for unicode escape
@@ -170,7 +198,7 @@ impl Parser {
             "formfeed" => '\x0C',
             "backspace" => '\x08',
             single_char if single_char.len() == 1 => single_char.chars().next().unwrap(),
-            _ => return Err(EqError::parse_error(
+            _ => return Err(EqError::parse_error_with_file(self.filename.clone(),
                 self.line,
                 self.column,
                 format!("Invalid character literal: \\{}", char_name)
@@ -189,10 +217,7 @@ impl Parser {
             if self.peek() == '#' && self.peek_ahead(1) == Some('_') {
                 // Handle discard macro
                 self.advance(); // consume '#'
-                self.advance(); // consume '_'
-                self.skip_whitespace_and_comments();
-                // Parse and discard the next value
-                let _discarded = self.parse_value()?;
+                self.consume_discard()?;
             } else {
                 elements.push(self.parse_value()?);
             }
@@ -200,7 +225,7 @@ impl Parser {
         }
         
         if self.is_at_end() {
-            return Err(EqError::parse_error(self.line, self.column, "Unterminated vector"));
+            return Err(EqError::parse_error_with_file(self.filename.clone(), self.line, self.column, "Unterminated vector"));
         }
         
         self.advance(); // consume ']'
@@ -216,10 +241,7 @@ impl Parser {
             if self.peek() == '#' && self.peek_ahead(1) == Some('_') {
                 // Handle discard macro
                 self.advance(); // consume '#'
-                self.advance(); // consume '_'
-                self.skip_whitespace_and_comments();
-                // Parse and discard the next value
-                let _discarded = self.parse_value()?;
+                self.consume_discard()?;
             } else {
                 elements.push(self.parse_value()?);
             }
@@ -227,7 +249,7 @@ impl Parser {
         }
         
         if self.is_at_end() {
-            return Err(EqError::parse_error(self.line, self.column, "Unterminated list"));
+            return Err(EqError::parse_error_with_file(self.filename.clone(), self.line, self.column, "Unterminated list"));
         }
         
         self.advance(); // consume ')'
@@ -240,65 +262,37 @@ impl Parser {
         
         self.skip_whitespace_and_comments();
         while !self.is_at_end() && self.peek() != '}' {
-            // Parse key (handling discard)
-            let key = if self.peek() == '#' && self.peek_ahead(1) == Some('_') {
-                // Discard the key, parse and discard next value, then continue to next iteration
+            // Check for discard at any position
+            if self.peek() == '#' && self.peek_ahead(1) == Some('_') {
+                // Just discard whatever the #_ says to discard
                 self.advance(); // consume '#'
-                self.advance(); // consume '_'
-                self.skip_whitespace_and_comments();
-                let _discarded_key = self.parse_value()?;
-                self.skip_whitespace_and_comments();
-                
-                // Also need to discard the corresponding value
-                if self.is_at_end() || self.peek() == '}' {
-                    return Err(EqError::parse_error(
-                        self.line,
-                        self.column,
-                        "Map literal must contain an even number of forms"
-                    ));
-                }
-                
-                if self.peek() == '#' && self.peek_ahead(1) == Some('_') {
-                    self.advance(); // consume '#'
-                    self.advance(); // consume '_'
-                    self.skip_whitespace_and_comments();
-                }
-                let _discarded_value = self.parse_value()?;
+                self.consume_discard()?;
                 self.skip_whitespace_and_comments();
                 continue;
-            } else {
-                self.parse_value()?
-            };
+            }
+            
+            // Parse the key
+            let key = self.parse_value()?;
             
             self.skip_whitespace_and_comments();
             
             if self.is_at_end() || self.peek() == '}' {
-                return Err(EqError::parse_error(
+                return Err(EqError::parse_error_with_file(self.filename.clone(),
                     self.line,
                     self.column,
                     "Map literal must contain an even number of forms"
                 ));
             }
             
-            // Parse value (handling discard)
-            let value = if self.peek() == '#' && self.peek_ahead(1) == Some('_') {
-                // Discard the value, parse and discard next value, then continue
-                self.advance(); // consume '#'
-                self.advance(); // consume '_'
-                self.skip_whitespace_and_comments();
-                let _discarded_value = self.parse_value()?;
-                self.skip_whitespace_and_comments();
-                continue;
-            } else {
-                self.parse_value()?
-            };
+            // Parse the value (discards are handled by parse_value)
+            let value = self.parse_value()?;
             
             map.insert(key, value);
             self.skip_whitespace_and_comments();
         }
         
         if self.is_at_end() {
-            return Err(EqError::parse_error(self.line, self.column, "Unterminated map"));
+            return Err(EqError::parse_error_with_file(self.filename.clone(), self.line, self.column, "Unterminated map"));
         }
         
         self.advance(); // consume '}'
@@ -308,12 +302,19 @@ impl Parser {
     fn parse_dispatch(&mut self) -> EqResult<EdnValue> {
         self.advance(); // consume '#'
         if self.is_at_end() {
-            return Err(EqError::parse_error(self.line, self.column, "Incomplete dispatch"));
+            return Err(EqError::parse_error_with_file(self.filename.clone(), self.line, self.column, "Incomplete dispatch"));
         }
         
         match self.peek() {
             '{' => self.parse_set(),
-            '_' => self.parse_discard(),
+            '_' => {
+                // This should not happen as #_ is handled in parse_value
+                Err(EqError::parse_error_with_file(self.filename.clone(),
+                    self.line,
+                    self.column,
+                    "Unexpected discard macro in dispatch"
+                ))
+            },
             _ => self.parse_tagged_literal(),
         }
     }
@@ -327,14 +328,11 @@ impl Parser {
             if self.peek() == '#' && self.peek_ahead(1) == Some('_') {
                 // Handle discard macro
                 self.advance(); // consume '#'
-                self.advance(); // consume '_'
-                self.skip_whitespace_and_comments();
-                // Parse and discard the next value
-                let _discarded = self.parse_value()?;
+                self.consume_discard()?;
             } else {
                 let element = self.parse_value()?;
                 if !set.insert(element.clone()) {
-                    return Err(EqError::parse_error(
+                    return Err(EqError::parse_error_with_file(self.filename.clone(),
                         self.line,
                         self.column,
                         "Duplicate element in set"
@@ -345,7 +343,7 @@ impl Parser {
         }
         
         if self.is_at_end() {
-            return Err(EqError::parse_error(self.line, self.column, "Unterminated set"));
+            return Err(EqError::parse_error_with_file(self.filename.clone(), self.line, self.column, "Unterminated set"));
         }
         
         self.advance(); // consume '}'
@@ -355,7 +353,7 @@ impl Parser {
     fn parse_tagged_literal(&mut self) -> EqResult<EdnValue> {
         let tag = self.read_symbol_name();
         if tag.is_empty() {
-            return Err(EqError::parse_error(self.line, self.column, "Empty tag"));
+            return Err(EqError::parse_error_with_file(self.filename.clone(), self.line, self.column, "Empty tag"));
         }
         
         self.skip_whitespace_and_comments();
@@ -369,14 +367,14 @@ impl Parser {
                     if self.is_valid_instant_string(&s) {
                         Ok(EdnValue::Instant(s))
                     } else {
-                        Err(EqError::parse_error(
+                        Err(EqError::parse_error_with_file(self.filename.clone(),
                             self.line,
                             self.column,
                             format!("Invalid instant format: {}", s)
                         ))
                     }
                 } else {
-                    Err(EqError::parse_error(
+                    Err(EqError::parse_error_with_file(self.filename.clone(),
                         self.line,
                         self.column,
                         "#inst requires a string value"
@@ -389,14 +387,14 @@ impl Parser {
                     if self.is_valid_uuid_string(&s) {
                         Ok(EdnValue::Uuid(s))
                     } else {
-                        Err(EqError::parse_error(
+                        Err(EqError::parse_error_with_file(self.filename.clone(),
                             self.line,
                             self.column,
                             format!("Invalid UUID format: {}", s)
                         ))
                     }
                 } else {
-                    Err(EqError::parse_error(
+                    Err(EqError::parse_error_with_file(self.filename.clone(),
                         self.line,
                         self.column,
                         "#uuid requires a string value"
@@ -425,25 +423,86 @@ impl Parser {
         })
     }
 
-    fn parse_discard(&mut self) -> EqResult<EdnValue> {
+    fn consume_discard(&mut self) -> EqResult<()> {
+        // This function only consumes a discard form without returning a value  
         self.advance(); // consume '_'
         self.skip_whitespace_and_comments();
         
-        // Parse and discard the next value
-        let _discarded = self.parse_value()?;
-        
-        // The discard macro itself doesn't produce a value, so this should only be called
-        // in contexts where we can handle the absence of a value (like collections).
-        // For standalone discard at top level, we need to parse the next value after discarding.
-        self.skip_whitespace_and_comments();
-        if self.is_at_end() {
-            // If we're at end after discarding, return nil
-            Ok(EdnValue::Nil)
+        // Check if the next form is another discard
+        if !self.is_at_end() && self.peek() == '#' && self.peek_ahead(1) == Some('_') {
+            // We have stacked discards like #_#_
+            // Process the inner discard first
+            self.advance(); // consume '#'
+            self.consume_discard()?; // This will discard one form
+            self.skip_whitespace_and_comments();
+            // After the inner discard completes, we still need to discard one more form
+            // because the outer #_ needs to discard something
+            if !self.is_at_end() {
+                let _discarded = self.parse_value_no_discard()?;
+            }
         } else {
-            // Parse the next value
-            self.parse_value()
+            // Normal case: just discard the next form
+            if !self.is_at_end() {
+                let _discarded = self.parse_value_no_discard()?;
+            }
+        }
+        
+        Ok(())
+    }
+    
+    fn parse_value_no_discard(&mut self) -> EqResult<EdnValue> {
+        // Like parse_value but doesn't handle leading #_ automatically
+        self.skip_whitespace_and_comments();
+        
+        if self.is_at_end() {
+            return Err(EqError::parse_error_with_file(self.filename.clone(), self.line, self.column, "Unexpected end of input"));
+        }
+
+        let ch = self.peek();
+        match ch {
+            'n' => self.parse_nil(),
+            't' | 'f' => self.parse_boolean(),
+            '"' => self.parse_string(),
+            ':' => self.parse_keyword(),
+            '\\' => self.parse_character(),
+            '[' => self.parse_vector(),
+            '(' => self.parse_list(),
+            '{' => self.parse_map(),
+            '#' => {
+                // Special handling for #_ in parse_value_no_discard
+                if self.peek_ahead(1) == Some('_') {
+                    // This is a discard - consume it and everything it discards,
+                    // then parse the next value
+                    self.advance(); // consume '#'
+                    self.consume_discard()?;
+                    // Now parse the actual value after the discard
+                    self.parse_value_no_discard()
+                } else {
+                    self.parse_dispatch()
+                }
+            },
+            '^' => self.parse_metadata(),
+            '0'..='9' => self.parse_number(),
+            '-' => {
+                // Look ahead to see if this is a negative number or a symbol
+                if self.peek_ahead(1).map_or(false, |c| c.is_ascii_digit()) {
+                    self.parse_number()
+                } else {
+                    self.parse_symbol()
+                }
+            }
+            '+' => {
+                // Look ahead to see if this is a positive number or a symbol
+                if self.peek_ahead(1).map_or(false, |c| c.is_ascii_digit()) {
+                    self.parse_number()
+                } else {
+                    self.parse_symbol()
+                }
+            }
+            _ => self.parse_symbol(),
         }
     }
+    
 
     fn parse_number(&mut self) -> EqResult<EdnValue> {
         let start_pos = self.position;
@@ -501,7 +560,7 @@ impl Parser {
         if has_dot || has_exponent {
             number_str.parse::<f64>()
                 .map(EdnValue::Float)
-                .map_err(|_| EqError::parse_error(
+                .map_err(|_| EqError::parse_error_with_file(self.filename.clone(),
                     self.line,
                     self.column,
                     format!("Invalid float: {}", number_str)
@@ -509,7 +568,7 @@ impl Parser {
         } else {
             number_str.parse::<i64>()
                 .map(EdnValue::Integer)
-                .map_err(|_| EqError::parse_error(
+                .map_err(|_| EqError::parse_error_with_file(self.filename.clone(),
                     self.line,
                     self.column,
                     format!("Invalid integer: {}", number_str)
@@ -520,7 +579,7 @@ impl Parser {
     fn parse_symbol(&mut self) -> EqResult<EdnValue> {
         let name = self.read_symbol_name();
         if name.is_empty() {
-            return Err(EqError::parse_error(self.line, self.column, "Empty symbol"));
+            return Err(EqError::parse_error_with_file(self.filename.clone(), self.line, self.column, "Empty symbol"));
         }
         Ok(EdnValue::Symbol(name))
     }
@@ -684,7 +743,7 @@ impl Parser {
         let mut hex_digits = String::new();
         for _ in 0..4 {
             if self.is_at_end() || !self.peek().is_ascii_hexdigit() {
-                return Err(EqError::parse_error(
+                return Err(EqError::parse_error_with_file(self.filename.clone(),
                     self.line,
                     self.column,
                     "Unicode escape requires exactly 4 hex digits"
@@ -699,14 +758,14 @@ impl Parser {
             if let Some(character) = char::from_u32(code_point) {
                 Ok(EdnValue::Character(character))
             } else {
-                Err(EqError::parse_error(
+                Err(EqError::parse_error_with_file(self.filename.clone(),
                     self.line,
                     self.column,
                     format!("Invalid Unicode code point: U+{}", hex_digits)
                 ))
             }
         } else {
-            Err(EqError::parse_error(
+            Err(EqError::parse_error_with_file(self.filename.clone(),
                 self.line,
                 self.column,
                 format!("Invalid hex digits in Unicode escape: {}", hex_digits)
@@ -719,7 +778,7 @@ impl Parser {
         let mut hex_digits = String::new();
         for _ in 0..4 {
             if self.is_at_end() || !self.peek().is_ascii_hexdigit() {
-                return Err(EqError::parse_error(
+                return Err(EqError::parse_error_with_file(self.filename.clone(),
                     self.line,
                     self.column,
                     "Unicode escape in string requires exactly 4 hex digits"
@@ -734,14 +793,14 @@ impl Parser {
             if let Some(character) = char::from_u32(code_point) {
                 Ok(character)
             } else {
-                Err(EqError::parse_error(
+                Err(EqError::parse_error_with_file(self.filename.clone(),
                     self.line,
                     self.column,
                     format!("Invalid Unicode code point in string: U+{}", hex_digits)
                 ))
             }
         } else {
-            Err(EqError::parse_error(
+            Err(EqError::parse_error_with_file(self.filename.clone(),
                 self.line,
                 self.column,
                 format!("Invalid hex digits in Unicode escape: {}", hex_digits)

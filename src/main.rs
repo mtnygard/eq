@@ -64,7 +64,14 @@ fn find_files_recursive(paths: &[PathBuf], pattern: &str, recursive: bool) -> Eq
     Ok(files)
 }
 
-fn main() -> EqResult<()> {
+fn main() {
+    if let Err(e) = run() {
+        eprintln!("Error: {}", e);
+        std::process::exit(1);
+    }
+}
+
+fn run() -> EqResult<()> {
     let args = Args::parse();
     
     // Set up output configuration
@@ -155,7 +162,7 @@ fn process_input<R: Read>(
     } else if args.slurp {
         // Parse all values and put them in a vector
         let mut values = Vec::new();
-        let mut parser = EdnParser::new(&input_string);
+        let mut parser = EdnParser::new_with_filename(&input_string, filename.map(|s| s.to_string()));
         
         // Keep parsing until we reach the end
         while let Ok(value) = parser.parse() {
@@ -171,7 +178,7 @@ fn process_input<R: Read>(
         print_result(&result, output_config, args, filename);
     } else {
         // Parse and process each top-level EDN value
-        let mut parser = EdnParser::new(&input_string);
+        let mut parser = EdnParser::new_with_filename(&input_string, filename.map(|s| s.to_string()));
         
         loop {
             let value = parser.parse()?;
