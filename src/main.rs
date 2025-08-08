@@ -12,6 +12,7 @@ mod query;
 mod analyzer;
 mod evaluator;
 mod output;
+mod builtins;
 
 use cli::Args;
 use error::EqResult;

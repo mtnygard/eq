@@ -13,8 +13,8 @@ impl QueryParser {
 
     fn edn_to_expr(value: EdnValue) -> EqResult<Expr> {
         match value {
-            // Identity
-            EdnValue::Symbol(ref s) if s == "." => Ok(Expr::Identity),
+            // Symbols
+            EdnValue::Symbol(s) => Ok(Expr::Symbol(s)),
             
             // Keywords are literals unless in function position
             EdnValue::Keyword(name) => Ok(Expr::Literal(EdnValue::Keyword(name))),
@@ -41,7 +41,7 @@ mod tests {
     #[test]
     fn test_parse_identity() {
         let expr = QueryParser::parse(".").unwrap();
-        assert_eq!(expr, Expr::Identity);
+        assert_eq!(expr, Expr::Symbol(".".to_string()));
     }
 
     #[test]
