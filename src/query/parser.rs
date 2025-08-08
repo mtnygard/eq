@@ -67,9 +67,10 @@ mod tests {
 
     #[test]
     fn test_parse_get_in() {
-        let expr = QueryParser::parse("(get-in [:user :profile :name])").unwrap();
+        let expr = QueryParser::parse("(get-in . [:user :profile :name])").unwrap();
         assert_eq!(expr, Expr::List(vec![
             EdnValue::Symbol("get-in".to_string()),
+            EdnValue::Symbol(".".to_string()),
             EdnValue::Vector(vec![
                 EdnValue::Keyword("user".to_string()),
                 EdnValue::Keyword("profile".to_string()),

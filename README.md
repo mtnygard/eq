@@ -116,7 +116,7 @@ eq '(drop 2 .)' numbers.edn
 **Access nested fields:**
 ```bash
 # Input: {:user {:profile {:name "Alice" :email "alice@example.com"}}}
-eq '(get-in [:user :profile :name])' user.edn
+eq '(get-in . [:user :profile :name])' user.edn
 # Output: "Alice"
 ```
 
@@ -176,7 +176,7 @@ eq '(:database .)' config.edn
 
 **Get just the database port:**
 ```bash
-eq '(get-in [:database :port])' config.edn
+eq '(get-in . [:database :port])' config.edn
 # Output: 5432
 ```
 
@@ -396,7 +396,7 @@ eq '(-> . :users (first) :profile :settings (keys))' app-state.edn
 ### Configuration Management
 ```bash
 # Extract environment-specific config
-eq '(get-in [:environments :production :database])' config.edn
+eq '(get-in . [:environments :production :database])' config.edn
 ```
 
 ### Log Analysis
@@ -414,7 +414,7 @@ eq '(-> . :entries (filter #(= (:level %) :error)))' log.edn
 | Array first | `.[0]` or `first` | `(first .)` |
 | Array length | `length` | `(count .)` |
 | Map keys | `keys` | `(keys .)` |
-| Nested access | `.user.profile.name` | `(get-in [:user :profile :name] .)` |
+| Nested access | `.user.profile.name` | `(get-in . [:user :profile :name])` |
 | Chaining | `.user \| .name` | `(-> . (:user) (:name))` |
 
 ## Contributing

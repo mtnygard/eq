@@ -14,8 +14,9 @@ pub fn evaluate(expr: &Expr, context: &EdnValue) -> EqResult<EdnValue> {
             Ok(context.get(key).cloned().unwrap_or(EdnValue::Nil))
         }
         
-        Expr::GetIn(path) => {
-            Ok(context.get_in(path.clone()).cloned().unwrap_or(EdnValue::Nil))
+        Expr::GetIn(input_expr, path) => {
+            let input_value = evaluate(input_expr, context)?;
+            Ok(input_value.get_in(path.clone()).cloned().unwrap_or(EdnValue::Nil))
         }
         
         Expr::KeywordAccess(name) => {

@@ -368,12 +368,13 @@ fn analyze_get(args: &[EdnValue]) -> EqResult<Expr> {
 }
 
 fn analyze_get_in(args: &[EdnValue]) -> EqResult<Expr> {
-    if args.len() != 1 {
-        return Err(EqError::query_error("get-in takes exactly one argument"));
+    if args.len() != 2 {
+        return Err(EqError::query_error("get-in takes exactly two arguments"));
     }
-    match &args[0] {
-        EdnValue::Vector(path) => Ok(Expr::GetIn(path.clone())),
-        _ => Err(EqError::query_error("get-in requires a vector argument")),
+    let input_expr = edn_to_expr(&args[0])?;
+    match &args[1] {
+        EdnValue::Vector(path) => Ok(Expr::GetIn(Box::new(input_expr), path.clone())),
+        _ => Err(EqError::query_error("get-in requires a vector as second argument")),
     }
 }
 

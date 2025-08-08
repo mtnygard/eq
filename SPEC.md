@@ -21,9 +21,9 @@ The filter language is based on Clojure syntax and functions:
 ### Basic Selectors
 
 - `.` - Identity (returns the input unchanged)
-- `(get :key)` - Get value by key from map
-- `(get 0)` - Get value by index from vector
-- `(get-in [:a :b])` - Navigate nested structures
+- `(get :key input)` - Get value by key from map
+- `(get 0 input)` - Get value by index from vector
+- `(get-in input [:a :b])` - Navigate nested structures
 - `(:key data)` - Keyword as function (shorthand for `(get :key data)`)
 
 ### Collection Operations
@@ -40,10 +40,10 @@ The filter language is based on Clojure syntax and functions:
 
 ### Filtering and Mapping
 
-- `(filter pred)` - Filter collection by predicate
-- `(map f)` - Map function over collection
-- `(remove pred)` - Remove elements matching predicate
-- `(select-keys [:k1 :k2])` - Select only specified keys from map
+- `(filter pred coll)` - Filter collection by predicate
+- `(map f coll)` - Map function over collection
+- `(remove pred coll)` - Remove elements matching predicate
+- `(select-keys input [:k1 :k2])` - Select only specified keys from map
 
 ### Predicates
 
@@ -96,26 +96,26 @@ The filter language is based on Clojure syntax and functions:
 ### Basic Selection
 ```bash
 # Get value by key
-echo '{:name "Alice" :age 30}' | eq '(:name)'
+echo '{:name "Alice" :age 30}' | eq '(:name .)'
 # Output: "Alice"
 
 # Navigate nested structure
-echo '{:user {:profile {:name "Bob"}}}' | eq '(get-in [:user :profile :name])'
+echo '{:user {:profile {:name "Bob"}}}' | eq '(get-in . [:user :profile :name])'
 # Output: "Bob"
 ```
 
 ### Array Operations
 ```bash
 # Get first element
-echo '[1 2 3 4 5]' | eq '(first)'
+echo '[1 2 3 4 5]' | eq '(first .)'
 # Output: 1
 
 # Filter even numbers
-echo '[1 2 3 4 5 6]' | eq '(filter even?)'
+echo '[1 2 3 4 5 6]' | eq '(filter even? .)'
 # Output: [2 4 6]
 
 # Map increment over array
-echo '[1 2 3]' | eq '(map inc)'
+echo '[1 2 3]' | eq '(map inc .)'
 # Output: [2 3 4]
 ```
 
@@ -133,7 +133,7 @@ echo '[{:type :cat :name "Fluffy"} {:type :dog :name "Rex"} {:type :cat :name "W
 ### File Processing
 ```bash
 # Process multiple files
-eq '(map :id)' data1.edn data2.edn
+eq '(map :id .)' data1.edn data2.edn
 
 # Read filter from file
 eq -f query.eq data.edn

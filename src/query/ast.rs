@@ -6,7 +6,7 @@ pub enum Expr {
     // Basic selectors
     Identity,                               // .
     Get(EdnValue),                         // (get :key) or (get 0)
-    GetIn(Vec<EdnValue>),                  // (get-in [:a :b])
+    GetIn(Box<Expr>, Vec<EdnValue>),       // (get-in input [:a :b])
     KeywordAccess(String),                 // :key (shorthand for get)
     KeywordGet(String, Box<Expr>),         // (:key expr) - get key from result of expr
     KeywordGetWithDefault(String, Box<Expr>, Box<Expr>), // (:key expr default) - get key with default
