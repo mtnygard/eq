@@ -19,7 +19,7 @@ fn test_basic_operations() {
     
     // Test keyword access
     let output = Command::new("./target/release/eq")
-        .args(&[":name", "test_basic.edn"])
+        .args(&["(:name)", "test_basic.edn"])
         .output()
         .expect("Failed to execute eq");
     
@@ -87,7 +87,7 @@ fn test_raw_output() {
     
     // Test raw string output
     let output = Command::new("./target/release/eq")
-        .args(&["--raw-output", ":message", "test_raw.edn"])
+        .args(&["--raw-output", "(:message)", "test_raw.edn"])
         .output()
         .expect("Failed to execute eq");
     

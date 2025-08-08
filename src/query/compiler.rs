@@ -26,7 +26,6 @@ pub enum OpCode {
     Vals,                     // Get values of map
     
     // Higher-order operations
-    Filter,                   // Filter collection (expects predicate bytecode)
     Map,                      // Map over collection (expects function bytecode)
     Remove,                   // Remove elements (expects predicate bytecode)
     SelectKeys,               // Select keys from map (expects keys on stack)
@@ -157,13 +156,6 @@ impl Compiler {
             Expr::Nth(n_expr) => {
                 self.compile_expr(*n_expr)?;
                 self.query.emit(OpCode::Nth);
-            }
-            
-            Expr::Filter(pred_expr) => {
-                // For now, compile the predicate inline
-                // In a full implementation, this would be a closure
-                self.compile_expr(*pred_expr)?;
-                self.query.emit(OpCode::Filter);
             }
             
             Expr::Map(func_expr) => {
@@ -379,12 +371,6 @@ mod tests {
     }
 
     #[test]
-    fn test_compile_filter() {
-        let query = compile(Expr::Filter(Box::new(Expr::IsNumber))).unwrap();
-        assert_eq!(query.bytecode, vec![OpCode::IsNumber, OpCode::Filter]);
-    }
-
-    #[test]
     fn test_compile_if() {
         let query = compile(Expr::If {
             test: Box::new(Expr::IsNil),
@@ -425,14 +411,13 @@ mod tests {
 
     #[test]
     fn test_compile_complex_expression() {
-        let query = compile(Expr::Filter(Box::new(
+        let query = compile(Expr::Select(Box::new(
             Expr::Map(Box::new(Expr::KeywordAccess("age".to_string())))
         ))).unwrap();
         
-        assert_eq!(query.bytecode, vec![
-            OpCode::KeywordGet("age".to_string()),
-            OpCode::Map,
-            OpCode::Filter,
-        ]);
+        assert_eq!(query.bytecode.len(), 2); // Push constant + Select
+        assert!(matches!(query.bytecode[0], OpCode::Push(_)));
+        assert_eq!(query.bytecode[1], OpCode::Select);
+        assert_eq!(query.constants.len(), 1); // The compiled predicate
     }
 }

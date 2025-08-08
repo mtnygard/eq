@@ -129,6 +129,11 @@ fn run() -> EqResult<()> {
 }
 
 fn print_result(result: &EdnValue, output_config: &OutputConfig, args: &Args, filename: Option<&str>) {
+    // Skip output for Skip values (from failed select filters)
+    if matches!(result, EdnValue::Skip) {
+        return;
+    }
+    
     let output = format_output(result, output_config);
     if args.with_filename {
         if let Some(fname) = filename {
@@ -223,7 +228,7 @@ mod integration_tests {
     #[test]
     fn test_keyword_access() {
         let mut vm = QueryVM::new();
-        let query_ast = QueryParser::parse(":name").unwrap();
+        let query_ast = QueryParser::parse("(:name)").unwrap();
         let compiled_query = compiler::compile(query_ast).unwrap();
         let config = OutputConfig::default();
         
@@ -288,7 +293,7 @@ mod integration_tests {
     #[test]
     fn test_complex_query() {
         let mut vm = QueryVM::new();
-        let query_ast = QueryParser::parse("(-> . (first) :name)").unwrap();
+        let query_ast = QueryParser::parse("(-> . (first) (:name))").unwrap();
         let compiled_query = compiler::compile(query_ast).unwrap();
         let config = OutputConfig::default();
         

@@ -30,6 +30,7 @@ pub enum EdnValue {
     Instant(String), // ISO 8601 timestamp string
     Uuid(String),    // UUID string
     CompiledQuery(CompiledQuery), // For internal use - compiled query objects
+    Skip,            // Internal value to indicate output should be skipped
 }
 
 impl EdnValue {
@@ -53,6 +54,7 @@ impl EdnValue {
             EdnValue::Instant(_) => "instant",
             EdnValue::Uuid(_) => "uuid",
             EdnValue::CompiledQuery(_) => "compiled-query",
+            EdnValue::Skip => "skip",
         }
     }
     
@@ -162,6 +164,9 @@ impl Hash for EdnValue {
                 // For hashing, we'll use a constant since queries are internal
                 "compiled-query".hash(state);
             }
+            EdnValue::Skip => {
+                "skip".hash(state);
+            }
         }
     }
 }
@@ -224,6 +229,7 @@ impl fmt::Display for EdnValue {
             EdnValue::Instant(s) => write!(f, "#inst \"{}\"", s),
             EdnValue::Uuid(s) => write!(f, "#uuid \"{}\"", s),
             EdnValue::CompiledQuery(_) => write!(f, "#compiled-query"),
+            EdnValue::Skip => write!(f, "#skip"),
         }
     }
 }

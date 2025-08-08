@@ -16,8 +16,8 @@ impl QueryParser {
             // Identity
             EdnValue::Symbol(ref s) if s == "." => Ok(Expr::Identity),
             
-            // Keyword access shorthand
-            EdnValue::Keyword(name) => Ok(Expr::KeywordAccess(name)),
+            // Keywords are literals unless in function position
+            EdnValue::Keyword(name) => Ok(Expr::Literal(EdnValue::Keyword(name))),
             
             // List expressions (function calls)
             EdnValue::List(elements) => {
@@ -30,7 +30,14 @@ impl QueryParser {
                 
                 match func {
                     EdnValue::Symbol(name) => Self::parse_function_call(name, args),
-                    _ => Err(EqError::query_error("First element of list must be a symbol")),
+                    EdnValue::Keyword(name) => {
+                        // Keywords in function position are accessors
+                        if !args.is_empty() {
+                            return Err(EqError::query_error("Keyword accessor takes no arguments"));
+                        }
+                        Ok(Expr::KeywordAccess(name.clone()))
+                    }
+                    _ => Err(EqError::query_error("First element of list must be a symbol or keyword")),
                 }
             }
             
@@ -57,7 +64,6 @@ impl QueryParser {
             "nth" => Self::parse_unary("nth", args, Expr::Nth),
             
             // Filtering and mapping
-            "filter" => Self::parse_unary("filter", args, Expr::Filter),
             "map" => Self::parse_unary("map", args, Expr::Map),
             "remove" => Self::parse_unary("remove", args, Expr::Remove),
             "select-keys" => Self::parse_select_keys(args),
@@ -260,7 +266,12 @@ mod tests {
 
     #[test]
     fn test_parse_keyword_access() {
+        // Standalone keywords are literals
         let expr = QueryParser::parse(":name").unwrap();
+        assert_eq!(expr, Expr::Literal(EdnValue::Keyword("name".to_string())));
+        
+        // Keywords in function position are accessors
+        let expr = QueryParser::parse("(:name)").unwrap();
         assert_eq!(expr, Expr::KeywordAccess("name".to_string()));
     }
 
@@ -290,12 +301,9 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_filter_map() {
-        let expr = QueryParser::parse("(filter (number?))").unwrap();
-        assert_eq!(expr, Expr::Filter(Box::new(Expr::IsNumber)));
-
+    fn test_parse_map() {
         let expr = QueryParser::parse("(map :name)").unwrap();
-        assert_eq!(expr, Expr::Map(Box::new(Expr::KeywordAccess("name".to_string()))));
+        assert_eq!(expr, Expr::Map(Box::new(Expr::Literal(EdnValue::Keyword("name".to_string())))));
     }
 
     #[test]
@@ -304,7 +312,7 @@ mod tests {
         assert_eq!(expr, Expr::ThreadFirst(vec![
             Expr::Identity,
             Expr::First,
-            Expr::KeywordAccess("name".to_string()),
+            Expr::Literal(EdnValue::Keyword("name".to_string())),
         ]));
     }
 
@@ -314,9 +322,9 @@ mod tests {
         match expr {
             Expr::If { test, then_expr, else_expr } => {
                 assert_eq!(*test, Expr::IsNil);
-                assert_eq!(*then_expr, Expr::KeywordAccess("empty".to_string()));
+                assert_eq!(*then_expr, Expr::Literal(EdnValue::Keyword("empty".to_string())));
                 assert!(else_expr.is_some());
-                assert_eq!(*else_expr.unwrap(), Expr::KeywordAccess("value".to_string()));
+                assert_eq!(*else_expr.unwrap(), Expr::Literal(EdnValue::Keyword("value".to_string())));
             }
             _ => panic!("Expected If expression"),
         }
@@ -341,14 +349,14 @@ mod tests {
 
     #[test]
     fn test_complex_expressions() {
-        let expr = QueryParser::parse("(->> . (filter (number?)) (map :value))").unwrap();
+        let expr = QueryParser::parse("(->> . (select (number?)) (map :value))").unwrap();
         
         match expr {
             Expr::ThreadLast(exprs) => {
                 assert_eq!(exprs.len(), 3);
                 assert_eq!(exprs[0], Expr::Identity);
-                assert_eq!(exprs[1], Expr::Filter(Box::new(Expr::IsNumber)));
-                assert_eq!(exprs[2], Expr::Map(Box::new(Expr::KeywordAccess("value".to_string()))));
+                assert_eq!(exprs[1], Expr::Select(Box::new(Expr::IsNumber)));
+                assert_eq!(exprs[2], Expr::Map(Box::new(Expr::Literal(EdnValue::Keyword("value".to_string())))));
             }
             _ => panic!("Expected ThreadLast"),
         }

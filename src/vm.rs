@@ -230,17 +230,6 @@ impl QueryVM {
                 self.stack.push(result);
             }
 
-            OpCode::Filter => {
-                // For now, simplified filter implementation
-                // In a full implementation, this would execute the predicate function
-                let _predicate = self.stack.pop().ok_or_else(|| EqError::runtime_error_str("filter", "Missing predicate"))?;
-                let coll = self.stack.pop().ok_or_else(|| EqError::runtime_error_str("filter", "Missing collection"))?;
-                
-                // Placeholder: just return the collection as-is
-                // A real implementation would apply the predicate to each element
-                self.stack.push(coll);
-            }
-
             OpCode::Map => {
                 // Simplified map implementation
                 let _func = self.stack.pop().ok_or_else(|| EqError::runtime_error_str("map", "Missing function"))?;
@@ -294,7 +283,7 @@ impl QueryVM {
                     if is_truthy {
                         self.stack.push(input); // Return the original input
                     } else {
-                        self.stack.push(EdnValue::Nil); // Return nil for falsy predicates
+                        self.stack.push(EdnValue::Skip); // Return Skip for falsy predicates
                     }
                 } else {
                     // If predicate is not a compiled query, treat it as a literal value
@@ -308,7 +297,7 @@ impl QueryVM {
                     if is_truthy {
                         self.stack.push(input);
                     } else {
-                        self.stack.push(EdnValue::Nil);
+                        self.stack.push(EdnValue::Skip);
                     }
                 }
             }

@@ -20,7 +20,6 @@ pub enum Expr {
     Vals,                                 // (vals)
 
     // Filtering and mapping
-    Filter(Box<Expr>),                    // (filter pred)
     Map(Box<Expr>),                       // (map f)
     Remove(Box<Expr>),                    // (remove pred)
     SelectKeys(Vec<EdnValue>),            // (select-keys [:k1 :k2])
@@ -91,8 +90,8 @@ mod tests {
 
     #[test]
     fn test_complex_expressions() {
-        let filter_expr = Expr::Filter(Box::new(Expr::IsNumber));
-        assert_eq!(filter_expr, Expr::Filter(Box::new(Expr::IsNumber)));
+        let select_expr = Expr::Select(Box::new(Expr::IsNumber));
+        assert_eq!(select_expr, Expr::Select(Box::new(Expr::IsNumber)));
 
         let map_expr = Expr::Map(Box::new(Expr::KeywordAccess("name".to_string())));
         assert_eq!(map_expr, Expr::Map(Box::new(Expr::KeywordAccess("name".to_string()))));
