@@ -7,6 +7,7 @@ use crate::error::EqResult;
 pub enum OpCode {
     // Stack operations
     Push(usize),              // Push constant at index
+    Dup,                      // Duplicate top of stack
     
     // Basic operations
     Identity,                 // No-op, pass through input
@@ -136,6 +137,12 @@ impl Compiler {
                 self.query.emit(OpCode::KeywordGet(name));
             }
             
+            Expr::KeywordGet(name, expr) => {
+                // Compile the expression first, then get the key from its result
+                self.compile_expr(*expr)?;
+                self.query.emit(OpCode::KeywordGet(name));
+            }
+            
             Expr::First => self.query.emit(OpCode::First),
             Expr::Last => self.query.emit(OpCode::Last),
             Expr::Rest => self.query.emit(OpCode::Rest),
@@ -177,7 +184,8 @@ impl Compiler {
             Expr::Select(pred_expr) => {
                 // Compile the predicate as a separate query
                 let predicate_query = Self::compile(*pred_expr)?;
-                let const_idx = self.query.add_constant(EdnValue::CompiledQuery(predicate_query));
+                // TODO: Remove this when we delete the compiler entirely
+                let const_idx = 0; // Placeholder
                 self.query.emit(OpCode::Push(const_idx));
                 self.query.emit(OpCode::Select);
             }
@@ -236,6 +244,8 @@ impl Compiler {
             }
             
             Expr::If { test, then_expr, else_expr } => {
+                // Save the original input for the then/else branches
+                self.query.emit(OpCode::Dup);
                 self.compile_expr(*test)?;
                 let jump_if_false = self.query.current_offset();
                 self.query.emit(OpCode::JumpIfFalse(0)); // Will be patched

@@ -9,14 +9,16 @@ mod cli;
 mod edn;
 mod error;
 mod query;
-mod vm;
+mod evaluator;
+mod macro_expansion;
 mod output;
 
 use cli::Args;
 use error::EqResult;
 use edn::{EdnValue, Parser as EdnParser};
-use query::{QueryParser, compiler};
-use vm::QueryVM;
+use query::QueryParser;
+use evaluator::evaluate;
+use macro_expansion::expand_macros;
 use output::{OutputConfig, format_output};
 
 fn find_files_recursive(paths: &[PathBuf], pattern: &str, recursive: bool) -> EqResult<Vec<PathBuf>> {
@@ -88,21 +90,18 @@ fn run() -> EqResult<()> {
         args.filter.clone()
     };
     
-    // Parse and compile the query
+    // Parse and expand the query
     let query_ast = QueryParser::parse(&filter)?;
-    let compiled_query = compiler::compile(query_ast)?;
-    
-    // Initialize VM
-    let mut vm = QueryVM::new();
+    let expanded_query = expand_macros(query_ast);
     
     // Process inputs
     if args.null_input {
         // No input, just run filter on nil
-        let result = vm.execute(&compiled_query, EdnValue::Nil)?;
+        let result = evaluate(&expanded_query, &EdnValue::Nil)?;
         print_result(&result, &output_config, &args, None);
     } else if args.files.is_empty() && !args.recursive {
         // Read from stdin
-        process_input(&mut vm, &compiled_query, &output_config, &args, io::stdin(), None)?;
+        process_input(&expanded_query, &output_config, &args, io::stdin(), None)?;
     } else {
         // Check if we need to do recursive file finding
         let files_to_process = if args.files.iter().any(|p| p.is_dir()) || args.recursive {
@@ -121,7 +120,7 @@ fn run() -> EqResult<()> {
         for file_path in &files_to_process {
             let file = fs::File::open(file_path)?;
             let filename = file_path.to_string_lossy();
-            process_input(&mut vm, &compiled_query, &output_config, &args, file, Some(&filename))?;
+            process_input(&expanded_query, &output_config, &args, file, Some(&filename))?;
         }
     }
     
@@ -131,6 +130,11 @@ fn run() -> EqResult<()> {
 fn print_result(result: &EdnValue, output_config: &OutputConfig, args: &Args, filename: Option<&str>) {
     // Skip output for Skip values (from failed select filters)
     if matches!(result, EdnValue::Skip) {
+        return;
+    }
+    
+    // Skip output for nil values if suppress_nil flag is set
+    if args.suppress_nil && matches!(result, EdnValue::Nil) {
         return;
     }
     
@@ -147,8 +151,7 @@ fn print_result(result: &EdnValue, output_config: &OutputConfig, args: &Args, fi
 }
 
 fn process_input<R: Read>(
-    vm: &mut QueryVM,
-    compiled_query: &compiler::CompiledQuery,
+    query: &query::ast::Expr,
     output_config: &OutputConfig,
     args: &Args,
     mut reader: R,
@@ -161,7 +164,7 @@ fn process_input<R: Read>(
         // Treat each line as a string
         for line in input_string.lines() {
             let input_value = EdnValue::String(line.to_string());
-            let result = vm.execute(compiled_query, input_value)?;
+            let result = evaluate(query, &input_value)?;
             print_result(&result, output_config, args, filename);
         }
     } else if args.slurp {
@@ -179,7 +182,7 @@ fn process_input<R: Read>(
         }
         
         let input_array = EdnValue::Vector(values);
-        let result = vm.execute(compiled_query, input_array)?;
+        let result = evaluate(query, &input_array)?;
         print_result(&result, output_config, args, filename);
     } else {
         // Parse and process each top-level EDN value
@@ -194,7 +197,7 @@ fn process_input<R: Read>(
             }
             
             // Process the parsed value
-            let result = vm.execute(compiled_query, value)?;
+            let result = evaluate(query, &value)?;
             print_result(&result, output_config, args, filename);
             
             // Check if there's more to parse
@@ -214,37 +217,34 @@ mod integration_tests {
 
     #[test]
     fn test_identity_query() {
-        let mut vm = QueryVM::new();
         let query_ast = QueryParser::parse(".").unwrap();
-        let compiled_query = compiler::compile(query_ast).unwrap();
+        let expanded_query = expand_macros(query_ast);
         let config = OutputConfig::default();
         
         let input = EdnValue::Integer(42);
-        let result = vm.execute(&compiled_query, input).unwrap();
+        let result = evaluate(&expanded_query, &input).unwrap();
         
         assert_eq!(format_output(&result, &config), "42");
     }
 
     #[test]
     fn test_keyword_access() {
-        let mut vm = QueryVM::new();
         let query_ast = QueryParser::parse("(:name)").unwrap();
-        let compiled_query = compiler::compile(query_ast).unwrap();
+        let expanded_query = expand_macros(query_ast);
         let config = OutputConfig::default();
         
         let mut map = indexmap::IndexMap::new();
         map.insert(EdnValue::Keyword("name".to_string()), EdnValue::String("Alice".to_string()));
         let input = EdnValue::Map(map);
         
-        let result = vm.execute(&compiled_query, input).unwrap();
+        let result = evaluate(&expanded_query, &input).unwrap();
         assert_eq!(format_output(&result, &config), "\"Alice\"");
     }
 
     #[test]
     fn test_collection_operations() {
-        let mut vm = QueryVM::new();
         let query_ast = QueryParser::parse("(first)").unwrap();
-        let compiled_query = compiler::compile(query_ast).unwrap();
+        let expanded_query = expand_macros(query_ast);
         let config = OutputConfig::default();
         
         let input = EdnValue::Vector(vec![
@@ -252,7 +252,7 @@ mod integration_tests {
             EdnValue::String("second".to_string()),
         ]);
         
-        let result = vm.execute(&compiled_query, input).unwrap();
+        let result = evaluate(&expanded_query, &input).unwrap();
         assert_eq!(format_output(&result, &config), "\"first\"");
     }
 
@@ -275,11 +275,11 @@ mod integration_tests {
             with_filename: false,
             recursive: false,
             glob_pattern: "*.edn".to_string(),
+            suppress_nil: false,
         };
         
-        let mut vm = QueryVM::new();
         let query_ast = QueryParser::parse(".").unwrap();
-        let compiled_query = compiler::compile(query_ast).unwrap();
+        let expanded_query = expand_macros(query_ast);
         let config = OutputConfig::default();
         
         let input_data = "hello\nworld\n";
@@ -287,14 +287,13 @@ mod integration_tests {
         
         // This would normally print, but we can't easily test that
         // In a real implementation, we'd refactor to return results
-        process_input(&mut vm, &compiled_query, &config, &args, cursor, Some("test_input")).unwrap();
+        process_input(&expanded_query, &config, &args, cursor, Some("test_input")).unwrap();
     }
 
     #[test]
     fn test_complex_query() {
-        let mut vm = QueryVM::new();
         let query_ast = QueryParser::parse("(-> . (first) (:name))").unwrap();
-        let compiled_query = compiler::compile(query_ast).unwrap();
+        let expanded_query = expand_macros(query_ast);
         let config = OutputConfig::default();
         
         let mut person1 = indexmap::IndexMap::new();
@@ -308,7 +307,7 @@ mod integration_tests {
             EdnValue::Map(person2),
         ]);
         
-        let result = vm.execute(&compiled_query, input).unwrap();
+        let result = evaluate(&expanded_query, &input).unwrap();
         assert_eq!(format_output(&result, &config), "\"Alice\"");
     }
     

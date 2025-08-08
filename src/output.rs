@@ -73,7 +73,6 @@ fn format_compact(value: &EdnValue, config: &OutputConfig) -> String {
         }
         EdnValue::Instant(s) => format!("#inst \"{}\"", s),
         EdnValue::Uuid(s) => format!("#uuid \"{}\"", s),
-        EdnValue::CompiledQuery(_) => "#compiled-query".to_string(),
         EdnValue::Skip => "#skip".to_string(),
     }
 }
@@ -111,7 +110,6 @@ fn format_pretty(value: &EdnValue, config: &OutputConfig, depth: usize) -> Strin
         }
         EdnValue::Instant(s) => format!("#inst \"{}\"", s),
         EdnValue::Uuid(s) => format!("#uuid \"{}\"", s),
-        EdnValue::CompiledQuery(_) => "#compiled-query".to_string(),
         EdnValue::Skip => "#skip".to_string(),
     }
 }
