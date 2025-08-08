@@ -2,6 +2,36 @@
 
 `eq` is a command-line tool for processing EDN (Extensible Data Notation) files, similar to how `jq` processes JSON. It uses Clojure-inspired syntax to query, filter, and transform EDN data.
 
+## Usage
+
+```
+Command-line EDN processor
+
+Usage: eq [OPTIONS] <FILTER> [FILES]...
+
+Arguments:
+  <FILTER>    Filter expression to apply
+  [FILES]...  Input files (reads from stdin if none provided)
+
+Options:
+  -c, --compact                 Compact instead of pretty-printed output
+      --raw-output              Output raw strings, not EDN strings
+  -R, --raw-input               Each line of input is a string, not parsed as EDN
+  -s, --slurp                   Read entire input stream into array
+  -n, --null-input              Don't read input; filter gets nil input
+  -e, --exit-status             Set exit status based on output
+  -f, --from-file <FILE>        Read filter from file
+      --tab                     Use tabs for indentation
+      --indent <N>              Use n spaces for indentation [default: 2]
+      --debug                   Show debug information
+  -v, --verbose                 Verbose output
+  -H, --with-filename           Print filename for each output line (like grep -H)
+  -r, --recursive               Recursively search directories for files
+  -p, --pattern <GLOB_PATTERN>  Glob pattern for file matching (default: "*.edn")
+  -h, --help                    Print help
+  -V, --version                 Print version
+```
+
 ## Installation
 
 ### From Source
@@ -180,7 +210,7 @@ eq -c '.' config.edn
 
 **Raw string output (remove quotes):**
 ```bash
-eq -r ':name' user.edn
+eq --raw-output ':name' user.edn
 # Output: Alice (instead of "Alice")
 ```
 
@@ -188,6 +218,39 @@ eq -r ':name' user.edn
 ```bash
 eq --indent 4 '.' config.edn  # Use 4 spaces
 eq --tab '.' config.edn       # Use tabs
+```
+
+### Directory and File Processing
+
+**Process all EDN files in a directory:**
+```bash
+eq ':name' directory/
+# Processes all *.edn files in directory/
+```
+
+**Recursively process files in subdirectories:**
+```bash
+eq -r ':name' project/
+# Recursively finds and processes all *.edn files
+```
+
+**Use custom file patterns:**
+```bash
+eq -p '*.json' '.' data/
+# Process all JSON files instead of EDN files
+
+eq -r -p '*.config.edn' '.' project/
+# Recursively find all files matching *.config.edn
+```
+
+**Show filenames with output:**
+```bash
+eq -H ':name' *.edn
+# Output: file1.edn:"Alice"
+#         file2.edn:"Bob"
+
+eq -r -H ':status' logs/
+# Shows filename with each result when processing multiple files
 ```
 
 ### Input Modes
