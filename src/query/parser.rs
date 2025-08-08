@@ -1,5 +1,5 @@
 use crate::edn::{EdnValue, Parser as EdnParser};
-use crate::error::{EqError, EqResult};
+use crate::error::EqResult;
 use crate::query::ast::Expr;
 
 pub struct QueryParser;
@@ -19,26 +19,9 @@ impl QueryParser {
             // Keywords are literals unless in function position
             EdnValue::Keyword(name) => Ok(Expr::Literal(EdnValue::Keyword(name))),
             
-            // List expressions (function calls)
+            // List expressions - just store as lists for analysis phase
             EdnValue::List(elements) => {
-                if elements.is_empty() {
-                    return Err(EqError::query_error("Empty list expression"));
-                }
-                
-                let func = &elements[0];
-                let args = &elements[1..];
-                
-                match func {
-                    EdnValue::Symbol(name) => Self::parse_function_call(name, args),
-                    EdnValue::Keyword(name) => {
-                        // Keywords in function position are accessors
-                        if !args.is_empty() {
-                            return Err(EqError::query_error("Keyword accessor takes no arguments"));
-                        }
-                        Ok(Expr::KeywordAccess(name.clone()))
-                    }
-                    _ => Err(EqError::query_error("First element of list must be a symbol or keyword")),
-                }
+                Ok(Expr::List(elements))
             }
             
             // Literals
@@ -46,212 +29,9 @@ impl QueryParser {
         }
     }
 
-    fn parse_function_call(name: &str, args: &[EdnValue]) -> EqResult<Expr> {
-        match name {
-            // Basic selectors
-            "get" => Self::parse_get(args),
-            "get-in" => Self::parse_get_in(args),
-            
-            // Collection operations
-            "first" => Self::parse_nullary("first", args, Expr::First),
-            "last" => Self::parse_nullary("last", args, Expr::Last),
-            "rest" => Self::parse_nullary("rest", args, Expr::Rest),
-            "count" => Self::parse_nullary("count", args, Expr::Count),
-            "keys" => Self::parse_nullary("keys", args, Expr::Keys),
-            "vals" => Self::parse_nullary("vals", args, Expr::Vals),
-            "take" => Self::parse_unary("take", args, Expr::Take),
-            "drop" => Self::parse_unary("drop", args, Expr::Drop),
-            "nth" => Self::parse_unary("nth", args, Expr::Nth),
-            
-            // Filtering and mapping
-            "map" => Self::parse_unary("map", args, Expr::Map),
-            "remove" => Self::parse_unary("remove", args, Expr::Remove),
-            "select-keys" => Self::parse_select_keys(args),
-            "select" => Self::parse_unary("select", args, Expr::Select),
-            
-            // Predicates
-            "nil?" => Self::parse_nullary("nil?", args, Expr::IsNil),
-            "empty?" => Self::parse_nullary("empty?", args, Expr::IsEmpty),
-            "number?" => Self::parse_nullary("number?", args, Expr::IsNumber),
-            "string?" => Self::parse_nullary("string?", args, Expr::IsString),
-            "keyword?" => Self::parse_nullary("keyword?", args, Expr::IsKeyword),
-            "boolean?" => Self::parse_nullary("boolean?", args, Expr::IsBoolean),
-            "contains?" => Self::parse_unary("contains?", args, Expr::Contains),
-            
-            // Comparison
-            "=" => Self::parse_binary("=", args, Expr::Equal),
-            "<" => Self::parse_unary("<", args, Expr::LessThan),
-            ">" => Self::parse_unary(">", args, Expr::GreaterThan),
-            "<=" => Self::parse_unary("<=", args, Expr::LessEqual),
-            ">=" => Self::parse_unary(">=", args, Expr::GreaterEqual),
-            
-            // Composition
-            "->" => Self::parse_threading("->", args, true),
-            "->>" => Self::parse_threading("->>", args, false),
-            "comp" => Self::parse_comp(args),
-            
-            // Conditionals
-            "if" => Self::parse_if(args),
-            "when" => Self::parse_when(args),
-            
-            // Aggregation
-            "reduce" => Self::parse_reduce(args),
-            "apply" => Self::parse_unary("apply", args, Expr::Apply),
-            "group-by" => Self::parse_unary("group-by", args, Expr::GroupBy),
-            "frequencies" => Self::parse_nullary("frequencies", args, Expr::Frequencies),
-            
-            _ => Err(EqError::query_error(format!("Unknown function: {}", name))),
-        }
-    }
+    // Parser no longer handles function calls - that's done in the analyzer
 
-    fn parse_nullary(name: &str, args: &[EdnValue], expr: Expr) -> EqResult<Expr> {
-        if !args.is_empty() {
-            return Err(EqError::query_error(format!("{} takes no arguments", name)));
-        }
-        Ok(expr)
-    }
-
-    fn parse_unary<F>(name: &str, args: &[EdnValue], constructor: F) -> EqResult<Expr>
-    where
-        F: FnOnce(Box<Expr>) -> Expr,
-    {
-        if args.len() != 1 {
-            return Err(EqError::query_error(format!("{} takes exactly one argument", name)));
-        }
-        let arg_expr = Self::edn_to_expr(args[0].clone())?;
-        Ok(constructor(Box::new(arg_expr)))
-    }
-
-    fn parse_binary<F>(name: &str, args: &[EdnValue], constructor: F) -> EqResult<Expr>
-    where
-        F: FnOnce(Box<Expr>, Box<Expr>) -> Expr,
-    {
-        if args.len() != 2 {
-            return Err(EqError::query_error(format!("{} takes exactly two arguments", name)));
-        }
-        let left_expr = Self::edn_to_expr(args[0].clone())?;
-        let right_expr = Self::edn_to_expr(args[1].clone())?;
-        Ok(constructor(Box::new(left_expr), Box::new(right_expr)))
-    }
-
-    fn parse_get(args: &[EdnValue]) -> EqResult<Expr> {
-        if args.len() != 1 {
-            return Err(EqError::query_error("get takes exactly one argument"));
-        }
-        Ok(Expr::Get(args[0].clone()))
-    }
-
-    fn parse_get_in(args: &[EdnValue]) -> EqResult<Expr> {
-        if args.len() != 1 {
-            return Err(EqError::query_error("get-in takes exactly one argument"));
-        }
-        
-        match &args[0] {
-            EdnValue::Vector(path) => Ok(Expr::GetIn(path.clone())),
-            _ => Err(EqError::query_error("get-in requires a vector argument")),
-        }
-    }
-
-    fn parse_select_keys(args: &[EdnValue]) -> EqResult<Expr> {
-        if args.len() != 1 {
-            return Err(EqError::query_error("select-keys takes exactly one argument"));
-        }
-        
-        match &args[0] {
-            EdnValue::Vector(keys) => Ok(Expr::SelectKeys(keys.clone())),
-            _ => Err(EqError::query_error("select-keys requires a vector argument")),
-        }
-    }
-
-    fn parse_threading(name: &str, args: &[EdnValue], _first: bool) -> EqResult<Expr> {
-        if args.is_empty() {
-            return Err(EqError::query_error(format!("{} requires at least one argument", name)));
-        }
-        
-        let exprs: Result<Vec<_>, _> = args.iter()
-            .map(|arg| Self::edn_to_expr(arg.clone()))
-            .collect();
-        
-        let exprs = exprs?;
-        
-        match name {
-            "->" => Ok(Expr::ThreadFirst(exprs)),
-            "->>" => Ok(Expr::ThreadLast(exprs)),
-            _ => unreachable!(),
-        }
-    }
-
-    fn parse_comp(args: &[EdnValue]) -> EqResult<Expr> {
-        if args.is_empty() {
-            return Err(EqError::query_error("comp requires at least one argument"));
-        }
-        
-        let exprs: Result<Vec<_>, _> = args.iter()
-            .map(|arg| Self::edn_to_expr(arg.clone()))
-            .collect();
-        
-        Ok(Expr::Comp(exprs?))
-    }
-
-    fn parse_if(args: &[EdnValue]) -> EqResult<Expr> {
-        match args.len() {
-            2 => {
-                let test = Self::edn_to_expr(args[0].clone())?;
-                let then_expr = Self::edn_to_expr(args[1].clone())?;
-                Ok(Expr::If {
-                    test: Box::new(test),
-                    then_expr: Box::new(then_expr),
-                    else_expr: None,
-                })
-            }
-            3 => {
-                let test = Self::edn_to_expr(args[0].clone())?;
-                let then_expr = Self::edn_to_expr(args[1].clone())?;
-                let else_expr = Self::edn_to_expr(args[2].clone())?;
-                Ok(Expr::If {
-                    test: Box::new(test),
-                    then_expr: Box::new(then_expr),
-                    else_expr: Some(Box::new(else_expr)),
-                })
-            }
-            _ => Err(EqError::query_error("if takes 2 or 3 arguments")),
-        }
-    }
-
-    fn parse_when(args: &[EdnValue]) -> EqResult<Expr> {
-        if args.len() != 2 {
-            return Err(EqError::query_error("when takes exactly 2 arguments"));
-        }
-        
-        let test = Self::edn_to_expr(args[0].clone())?;
-        let expr = Self::edn_to_expr(args[1].clone())?;
-        
-        Ok(Expr::When {
-            test: Box::new(test),
-            expr: Box::new(expr),
-        })
-    }
-
-    fn parse_reduce(args: &[EdnValue]) -> EqResult<Expr> {
-        match args.len() {
-            1 => {
-                let func = Self::edn_to_expr(args[0].clone())?;
-                Ok(Expr::Reduce {
-                    func: Box::new(func),
-                    init: None,
-                })
-            }
-            2 => {
-                let func = Self::edn_to_expr(args[0].clone())?;
-                let init = Self::edn_to_expr(args[1].clone())?;
-                Ok(Expr::Reduce {
-                    func: Box::new(func),
-                    init: Some(Box::new(init)),
-                })
-            }
-            _ => Err(EqError::query_error("reduce takes 1 or 2 arguments")),
-        }
-    }
+    // All parsing helpers removed - analysis phase handles function calls
 }
 
 #[cfg(test)]
@@ -270,64 +50,69 @@ mod tests {
         let expr = QueryParser::parse(":name").unwrap();
         assert_eq!(expr, Expr::Literal(EdnValue::Keyword("name".to_string())));
         
-        // Keywords in function position are accessors
+        // Keywords in function position - parsed as lists
         let expr = QueryParser::parse("(:name)").unwrap();
-        assert_eq!(expr, Expr::KeywordAccess("name".to_string()));
+        assert_eq!(expr, Expr::List(vec![EdnValue::Keyword("name".to_string())]));
+        
+        // Keywords with one argument
+        let expr = QueryParser::parse("(:name .)").unwrap();
+        assert_eq!(expr, Expr::List(vec![EdnValue::Keyword("name".to_string()), EdnValue::Symbol(".".to_string())]));
     }
 
     #[test]
     fn test_parse_get() {
         let expr = QueryParser::parse("(get :name)").unwrap();
-        assert_eq!(expr, Expr::Get(EdnValue::Keyword("name".to_string())));
+        assert_eq!(expr, Expr::List(vec![EdnValue::Symbol("get".to_string()), EdnValue::Keyword("name".to_string())]));
     }
 
     #[test]
     fn test_parse_get_in() {
         let expr = QueryParser::parse("(get-in [:user :profile :name])").unwrap();
-        assert_eq!(expr, Expr::GetIn(vec![
-            EdnValue::Keyword("user".to_string()),
-            EdnValue::Keyword("profile".to_string()),
-            EdnValue::Keyword("name".to_string()),
+        assert_eq!(expr, Expr::List(vec![
+            EdnValue::Symbol("get-in".to_string()),
+            EdnValue::Vector(vec![
+                EdnValue::Keyword("user".to_string()),
+                EdnValue::Keyword("profile".to_string()),
+                EdnValue::Keyword("name".to_string()),
+            ])
         ]));
     }
 
     #[test]
     fn test_parse_collection_ops() {
         let expr = QueryParser::parse("(first)").unwrap();
-        assert_eq!(expr, Expr::First);
+        assert_eq!(expr, Expr::List(vec![EdnValue::Symbol("first".to_string())]));
 
         let expr = QueryParser::parse("(count)").unwrap();
-        assert_eq!(expr, Expr::Count);
+        assert_eq!(expr, Expr::List(vec![EdnValue::Symbol("count".to_string())]));
     }
 
     #[test]
     fn test_parse_map() {
         let expr = QueryParser::parse("(map :name)").unwrap();
-        assert_eq!(expr, Expr::Map(Box::new(Expr::Literal(EdnValue::Keyword("name".to_string())))));
+        assert_eq!(expr, Expr::List(vec![EdnValue::Symbol("map".to_string()), EdnValue::Keyword("name".to_string())]));
     }
 
     #[test]
     fn test_parse_threading() {
         let expr = QueryParser::parse("(-> . (first) :name)").unwrap();
-        assert_eq!(expr, Expr::ThreadFirst(vec![
-            Expr::Identity,
-            Expr::First,
-            Expr::Literal(EdnValue::Keyword("name".to_string())),
+        assert_eq!(expr, Expr::List(vec![
+            EdnValue::Symbol("->".to_string()),
+            EdnValue::Symbol(".".to_string()),
+            EdnValue::List(vec![EdnValue::Symbol("first".to_string())]),
+            EdnValue::Keyword("name".to_string()),
         ]));
     }
 
     #[test]
     fn test_parse_if() {
         let expr = QueryParser::parse("(if (nil?) :empty :value)").unwrap();
-        match expr {
-            Expr::If { test, then_expr, else_expr } => {
-                assert_eq!(*test, Expr::IsNil);
-                assert_eq!(*then_expr, Expr::Literal(EdnValue::Keyword("empty".to_string())));
-                assert!(else_expr.is_some());
-                assert_eq!(*else_expr.unwrap(), Expr::Literal(EdnValue::Keyword("value".to_string())));
-            }
-            _ => panic!("Expected If expression"),
-        }
+        assert_eq!(expr, Expr::List(vec![
+            EdnValue::Symbol("if".to_string()),
+            EdnValue::List(vec![EdnValue::Symbol("nil?".to_string())]),
+            EdnValue::Keyword("empty".to_string()),
+            EdnValue::Keyword("value".to_string()),
+        ]));
     }
 
     #[test]
@@ -341,24 +126,41 @@ mod tests {
 
     #[test]
     fn test_parse_errors() {
-        assert!(QueryParser::parse("()").is_err());
-        assert!(QueryParser::parse("(unknown-function)").is_err());
-        assert!(QueryParser::parse("(get)").is_err());
-        assert!(QueryParser::parse("(get :a :b)").is_err());
+        // Empty lists should parse successfully (error checking happens during analysis)
+        let expr = QueryParser::parse("()").unwrap();
+        assert_eq!(expr, Expr::List(vec![]));
+        
+        // Unknown functions should parse as lists (error checking happens during analysis)
+        let expr = QueryParser::parse("(unknown-function)").unwrap();
+        assert_eq!(expr, Expr::List(vec![EdnValue::Symbol("unknown-function".to_string())]));
+        
+        // Parser accepts any list structure (analysis phase handles arity checking)
+        let expr = QueryParser::parse("(get)").unwrap();
+        assert_eq!(expr, Expr::List(vec![EdnValue::Symbol("get".to_string())]));
+        
+        let expr = QueryParser::parse("(get :a :b)").unwrap();
+        assert_eq!(expr, Expr::List(vec![
+            EdnValue::Symbol("get".to_string()), 
+            EdnValue::Keyword("a".to_string()), 
+            EdnValue::Keyword("b".to_string())
+        ]));
     }
 
     #[test]
     fn test_complex_expressions() {
         let expr = QueryParser::parse("(->> . (select (number?)) (map :value))").unwrap();
         
-        match expr {
-            Expr::ThreadLast(exprs) => {
-                assert_eq!(exprs.len(), 3);
-                assert_eq!(exprs[0], Expr::Identity);
-                assert_eq!(exprs[1], Expr::Select(Box::new(Expr::IsNumber)));
-                assert_eq!(exprs[2], Expr::Map(Box::new(Expr::Literal(EdnValue::Keyword("value".to_string())))));
-            }
-            _ => panic!("Expected ThreadLast"),
-        }
+        assert_eq!(expr, Expr::List(vec![
+            EdnValue::Symbol("->>".to_string()),
+            EdnValue::Symbol(".".to_string()),
+            EdnValue::List(vec![
+                EdnValue::Symbol("select".to_string()),
+                EdnValue::List(vec![EdnValue::Symbol("number?".to_string())])
+            ]),
+            EdnValue::List(vec![
+                EdnValue::Symbol("map".to_string()),
+                EdnValue::Keyword("value".to_string())
+            ])
+        ]));
     }
 }

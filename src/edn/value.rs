@@ -29,7 +29,6 @@ pub enum EdnValue {
     },
     Instant(String), // ISO 8601 timestamp string
     Uuid(String),    // UUID string
-    Skip,            // Internal value to indicate output should be skipped
 }
 
 impl EdnValue {
@@ -52,7 +51,6 @@ impl EdnValue {
             EdnValue::WithMetadata { .. } => "with-metadata",
             EdnValue::Instant(_) => "instant",
             EdnValue::Uuid(_) => "uuid",
-            EdnValue::Skip => "skip",
         }
     }
     
@@ -158,9 +156,6 @@ impl Hash for EdnValue {
             }
             EdnValue::Instant(s) => s.hash(state),
             EdnValue::Uuid(s) => s.hash(state),
-            EdnValue::Skip => {
-                "skip".hash(state);
-            }
         }
     }
 }
@@ -222,7 +217,6 @@ impl fmt::Display for EdnValue {
             EdnValue::WithMetadata { metadata, value } => write!(f, "^{} {}", metadata, value),
             EdnValue::Instant(s) => write!(f, "#inst \"{}\"", s),
             EdnValue::Uuid(s) => write!(f, "#uuid \"{}\"", s),
-            EdnValue::Skip => write!(f, "#skip"),
         }
     }
 }

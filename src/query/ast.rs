@@ -1,23 +1,26 @@
 use crate::edn::EdnValue;
 
 #[derive(Debug, Clone, PartialEq)]
+#[allow(dead_code)] // Some variants are used by analyzer but not detected by compiler
 pub enum Expr {
     // Basic selectors
     Identity,                               // .
     Get(EdnValue),                         // (get :key) or (get 0)
     GetIn(Vec<EdnValue>),                  // (get-in [:a :b])
     KeywordAccess(String),                 // :key (shorthand for get)
+    KeywordGet(String, Box<Expr>),         // (:key expr) - get key from result of expr
+    KeywordGetWithDefault(String, Box<Expr>, Box<Expr>), // (:key expr default) - get key with default
 
     // Collection operations
-    First,                                 // (first)
-    Last,                                  // (last)
-    Rest,                                  // (rest)
-    Take(Box<Expr>),                      // (take n)
-    Drop(Box<Expr>),                      // (drop n)
-    Nth(Box<Expr>),                       // (nth n)
-    Count,                                // (count)
-    Keys,                                 // (keys)
-    Vals,                                 // (vals)
+    First(Box<Expr>),                     // (first coll)
+    Last(Box<Expr>),                      // (last coll)
+    Rest(Box<Expr>),                      // (rest coll)
+    Take(Box<Expr>, Box<Expr>),           // (take n coll)
+    Drop(Box<Expr>, Box<Expr>),           // (drop n coll)
+    Nth(Box<Expr>, Box<Expr>),            // (nth n coll)
+    Count(Box<Expr>),                     // (count coll)
+    Keys(Box<Expr>),                      // (keys coll)
+    Vals(Box<Expr>),                      // (vals coll)
 
     // Filtering and mapping
     Map(Box<Expr>),                       // (map f)
@@ -66,6 +69,9 @@ pub enum Expr {
     GroupBy(Box<Expr>),                   // (group-by f)
     Frequencies,                          // (frequencies)
 
+    // Raw parsed forms (before analysis)
+    List(Vec<EdnValue>),                 // raw list from parser, needs analysis
+    
     // Literals
     Literal(EdnValue),                    // literal values
     
@@ -101,7 +107,7 @@ mod tests {
     fn test_threading_expressions() {
         let thread_first = Expr::ThreadFirst(vec![
             Expr::Identity,
-            Expr::First,
+            Expr::First(Box::new(Expr::Identity)),
             Expr::KeywordAccess("name".to_string())
         ]);
         
@@ -109,7 +115,7 @@ mod tests {
             Expr::ThreadFirst(exprs) => {
                 assert_eq!(exprs.len(), 3);
                 assert_eq!(exprs[0], Expr::Identity);
-                assert_eq!(exprs[1], Expr::First);
+                assert_eq!(exprs[1], Expr::First(Box::new(Expr::Identity)));
                 assert_eq!(exprs[2], Expr::KeywordAccess("name".to_string()));
             }
             _ => panic!("Expected ThreadFirst"),

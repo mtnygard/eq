@@ -19,7 +19,7 @@ fn test_basic_operations() {
     
     // Test keyword access
     let output = Command::new("./target/release/eq")
-        .args(&["(:name)", "test_basic.edn"])
+        .args(&["(:name .)", "test_basic.edn"])
         .output()
         .expect("Failed to execute eq");
     
@@ -38,7 +38,7 @@ fn test_collection_operations() {
     
     // Test first
     let output = Command::new("./target/release/eq")
-        .args(&["(first)", "test_array.edn"])
+        .args(&["(first .)", "test_array.edn"])
         .output()
         .expect("Failed to execute eq");
     
@@ -48,7 +48,7 @@ fn test_collection_operations() {
     
     // Test count
     let output = Command::new("./target/release/eq")
-        .args(&["(count)", "test_array.edn"])
+        .args(&["(count .)", "test_array.edn"])
         .output()
         .expect("Failed to execute eq");
     
@@ -87,7 +87,7 @@ fn test_raw_output() {
     
     // Test raw string output
     let output = Command::new("./target/release/eq")
-        .args(&["--raw-output", "(:message)", "test_raw.edn"])
+        .args(&["--raw-output", "(:message .)", "test_raw.edn"])
         .output()
         .expect("Failed to execute eq");
     
@@ -250,7 +250,7 @@ fn test_metadata_parsing() {
     // Test accessing the value through metadata
     fs::write("test_metadata3.edn", r#"^{:doc "A set"} #{:a :b :c}"#).unwrap();
     let output = Command::new("./target/release/eq")
-        .args(&["(count)", "test_metadata3.edn"])
+        .args(&["(count .)", "test_metadata3.edn"])
         .output()
         .expect("Failed to execute eq");
     
@@ -291,7 +291,7 @@ fn test_discard_macro() {
     // Test discard in set
     fs::write("test_discard3.edn", r#"#{1 #_ 2 3}"#).unwrap();
     let output = Command::new("./target/release/eq")
-        .args(&["(count)", "test_discard3.edn"])
+        .args(&["(count .)", "test_discard3.edn"])
         .output()
         .expect("Failed to execute eq");
     
@@ -421,7 +421,7 @@ fn test_comma_as_whitespace() {
     // Test trailing commas
     fs::write("test_trailing_commas.edn", r#"[1, 2, 3,]"#).unwrap();
     let output = Command::new("./target/release/eq")
-        .args(&["(count)", "test_trailing_commas.edn"])
+        .args(&["(count .)", "test_trailing_commas.edn"])
         .output()
         .expect("Failed to execute eq");
     
@@ -433,7 +433,7 @@ fn test_comma_as_whitespace() {
     // Test multiple consecutive commas
     fs::write("test_multiple_commas.edn", r#"[1,, 2,,, 3]"#).unwrap();
     let output = Command::new("./target/release/eq")
-        .args(&["(count)", "test_multiple_commas.edn"])
+        .args(&["(count .)", "test_multiple_commas.edn"])
         .output()
         .expect("Failed to execute eq");
     

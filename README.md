@@ -45,7 +45,7 @@ The binary will be available at `target/release/eq`.
 
 ### Quick Test
 ```bash
-echo '{:name "Alice" :age 30}' | ./target/release/eq ':name'
+echo '{:name "Alice" :age 30}' | ./target/release/eq '(:name .)'
 # Output: "Alice"
 ```
 
@@ -57,6 +57,15 @@ eq '<filter>' [file...]
 
 If no file is provided, `eq` reads from stdin.
 
+## Important: Function Syntax
+
+All functions in `eq` require explicit arguments. For example:
+- Use `(first .)` instead of `(first)`  
+- Use `(:name .)` instead of `:name`
+- Use `(count .)` instead of `(count)`
+
+The dot (`.`) represents the current input value being processed. This design enables consistent behavior with threading macros like `->` and `->>`.
+
 ## Getting Started
 
 ### Simple Data Extraction
@@ -64,10 +73,10 @@ If no file is provided, `eq` reads from stdin.
 **Extract a field from a map:**
 ```bash
 # Input: {:name "Alice" :age 30 :city "New York"}
-eq ':name' data.edn
+eq '(:name .)' data.edn
 # Output: "Alice"
 
-eq ':age' data.edn  
+eq '(:age .)' data.edn  
 # Output: 30
 ```
 
@@ -82,23 +91,23 @@ eq '.' data.edn
 **Arrays/vectors:**
 ```bash
 # Input: [1 2 3 4 5]
-eq '(first)' numbers.edn
+eq '(first .)' numbers.edn
 # Output: 1
 
-eq '(last)' numbers.edn
+eq '(last .)' numbers.edn
 # Output: 5
 
-eq '(count)' numbers.edn
+eq '(count .)' numbers.edn
 # Output: 5
 ```
 
 **Take and drop elements:**
 ```bash
 # Input: [1 2 3 4 5]
-eq '(take 3)' numbers.edn
+eq '(take 3 .)' numbers.edn
 # Output: [1 2 3]
 
-eq '(drop 2)' numbers.edn
+eq '(drop 2 .)' numbers.edn
 # Output: [3 4 5]
 ```
 
@@ -134,19 +143,19 @@ eq '(-> . (first) :scores (first))' students.edn
 
 **Get the first user:**
 ```bash
-eq '(first)' users.edn
+eq '(first .)' users.edn
 # Output: {:name "Alice" :age 30 :department "Engineering" :skills [:clojure :rust :python]}
 ```
 
 **Get first user's name:**
 ```bash
-eq '(-> . (first) :name)' users.edn
+eq '(-> . (first) (:name))' users.edn
 # Output: "Alice"
 ```
 
 **Count total users:**
 ```bash
-eq '(count)' users.edn
+eq '(count .)' users.edn
 # Output: 3
 ```
 
@@ -161,7 +170,7 @@ eq '(count)' users.edn
 
 **Get database configuration:**
 ```bash
-eq ':database' config.edn
+eq '(:database .)' config.edn
 # Output: {:host "localhost" :port 5432 :name "myapp"}
 ```
 
@@ -173,7 +182,7 @@ eq '(get-in [:database :port])' config.edn
 
 **Get all top-level keys:**
 ```bash
-eq '(keys)' config.edn
+eq '(keys .)' config.edn
 # Output: [:database :server :logging]
 ```
 
@@ -188,7 +197,7 @@ eq '(keys)' config.edn
 
 **Get first product's details:**
 ```bash
-eq '(-> . (first) :product)' sales.edn
+eq '(-> . (first) (:product))' sales.edn
 # Output: "Widget A"
 ```
 
@@ -210,7 +219,7 @@ eq -c '.' config.edn
 
 **Raw string output (remove quotes):**
 ```bash
-eq --raw-output ':name' user.edn
+eq --raw-output '(:name .)' user.edn
 # Output: Alice (instead of "Alice")
 ```
 
@@ -224,13 +233,13 @@ eq --tab '.' config.edn       # Use tabs
 
 **Process all EDN files in a directory:**
 ```bash
-eq ':name' directory/
+eq '(:name .)' directory/
 # Processes all *.edn files in directory/
 ```
 
 **Recursively process files in subdirectories:**
 ```bash
-eq -r ':name' project/
+eq -r '(:name .)' project/
 # Recursively finds and processes all *.edn files
 ```
 
@@ -245,11 +254,11 @@ eq -r -p '*.config.edn' '.' project/
 
 **Show filenames with output:**
 ```bash
-eq -H ':name' *.edn
+eq -H '(:name .)' *.edn
 # Output: file1.edn:"Alice"
 #         file2.edn:"Bob"
 
-eq -r -H ':status' logs/
+eq -r -H '(:status .)' logs/
 # Shows filename with each result when processing multiple files
 ```
 
@@ -268,7 +277,7 @@ echo -e "hello\nworld" | eq -R '.'
 # Input: multiple EDN values on separate lines
 # {:name "Alice"}
 # {:name "Bob"}
-eq -s '(count)' multi-users.edn
+eq -s '(count .)' multi-users.edn
 # Output: 2
 ```
 
@@ -282,7 +291,7 @@ eq -n '(if (nil?) :is-null :not-null)'
 
 **Save complex queries in files:**
 ```bash
-echo '(-> . (first) :name)' > get-first-name.eq
+echo '(-> . (first) (:name))' > get-first-name.eq
 eq -f get-first-name.eq users.edn
 # Output: "Alice"
 ```
@@ -292,13 +301,13 @@ eq -f get-first-name.eq users.edn
 ### Type Checking
 ```bash
 # Check if value is nil
-eq '(nil?)' data.edn
+eq '(nil? .)' data.edn
 
 # Check if value is a number  
-eq '(number?)' data.edn
+eq '(number? .)' data.edn
 
 # Check if collection is empty
-eq '(empty?)' data.edn
+eq '(empty? .)' data.edn
 ```
 
 ### Comparisons
@@ -321,7 +330,7 @@ eq '(if (= :status "active") :online :offline)' user.edn
 ### Data Frequency Analysis
 ```bash
 # Input: [:red :blue :red :green :blue :red]
-eq '(frequencies)' colors.edn
+eq '(frequencies .)' colors.edn
 # Output: {:red 3 :blue 2 :green 1}
 ```
 
@@ -329,19 +338,19 @@ eq '(frequencies)' colors.edn
 
 ### From Files
 ```bash
-eq ':name' user.edn
-eq '(count)' collection.edn
+eq '(:name .)' user.edn
+eq '(count .)' collection.edn
 ```
 
 ### From Stdin (Pipes)
 ```bash
-curl -s api.example.com/users.edn | eq '(-> . (first) :name)'
-cat data.edn | eq '(take 5)'
+curl -s api.example.com/users.edn | eq '(-> . (first) (:name))'
+cat data.edn | eq '(take 5 .)'
 ```
 
 ### Multiple Files
 ```bash
-eq ':timestamp' log1.edn log2.edn log3.edn
+eq '(:timestamp .)' log1.edn log2.edn log3.edn
 ```
 
 ## Error Handling
@@ -401,12 +410,12 @@ eq '(-> . :entries (filter #(= (:level %) :error)))' log.edn
 | Operation | jq | eq |
 |-----------|----|----|
 | Identity | `.` | `.` |
-| Field access | `.name` | `:name` |
-| Array first | `.[0]` or `first` | `(first)` |
-| Array length | `length` | `(count)` |
-| Map keys | `keys` | `(keys)` |
-| Nested access | `.user.profile.name` | `(get-in [:user :profile :name])` |
-| Chaining | `.user \| .name` | `(-> . :user :name)` |
+| Field access | `.name` | `(:name .)` |
+| Array first | `.[0]` or `first` | `(first .)` |
+| Array length | `length` | `(count .)` |
+| Map keys | `keys` | `(keys .)` |
+| Nested access | `.user.profile.name` | `(get-in [:user :profile :name] .)` |
+| Chaining | `.user \| .name` | `(-> . (:user) (:name))` |
 
 ## Contributing
 

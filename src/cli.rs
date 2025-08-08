@@ -67,6 +67,10 @@ pub struct Args {
     /// Glob pattern for file matching (default: "*.edn")
     #[arg(short = 'p', long = "pattern", default_value = "*.edn")]
     pub glob_pattern: String,
+    
+    /// Suppress output when query result is nil
+    #[arg(long = "suppress-nil")]
+    pub suppress_nil: bool,
 }
 
 #[cfg(test)]
@@ -89,8 +93,8 @@ mod tests {
     
     #[test]
     fn test_file_args() {
-        let args = Args::try_parse_from(&["eq", "(first)", "test.edn"]).unwrap();
-        assert_eq!(args.filter, "(first)");
+        let args = Args::try_parse_from(&["eq", "(first .)", "test.edn"]).unwrap();
+        assert_eq!(args.filter, "(first .)");
         assert_eq!(args.files.len(), 1);
         assert_eq!(args.files[0], PathBuf::from("test.edn"));
     }

@@ -18,13 +18,6 @@ pub enum EqError {
     #[error("IO error: {0}")]
     IoError(#[from] std::io::Error),
     
-    #[error("Runtime error in {context}: {source}")]
-    RuntimeError {
-        context: String,
-        #[source]
-        source: Box<dyn std::error::Error + Send + Sync>,
-    },
-    
     #[error("Type error: expected {expected}, got {actual}")]
     TypeError { expected: String, actual: String },
     
@@ -48,13 +41,6 @@ impl EqError {
     pub fn query_error(message: impl Into<String>) -> Self {
         Self::QueryError {
             message: message.into(),
-        }
-    }
-    
-    pub fn runtime_error_str(context: impl Into<String>, message: impl Into<String>) -> Self {
-        Self::RuntimeError {
-            context: context.into(),
-            source: Box::new(std::io::Error::new(std::io::ErrorKind::Other, message.into())),
         }
     }
     

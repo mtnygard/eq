@@ -50,6 +50,14 @@ pub fn expand_macros(expr: Expr) -> Expr {
             Expr::KeywordGet(name, Box::new(expand_macros(*expr)))
         }
         
+        Expr::KeywordGetWithDefault(name, expr, default_expr) => {
+            Expr::KeywordGetWithDefault(
+                name, 
+                Box::new(expand_macros(*expr)), 
+                Box::new(expand_macros(*default_expr))
+            )
+        }
+        
         Expr::Take(expr) => Expr::Take(Box::new(expand_macros(*expr))),
         Expr::Drop(expr) => Expr::Drop(Box::new(expand_macros(*expr))),
         Expr::Nth(expr) => Expr::Nth(Box::new(expand_macros(*expr))),
@@ -89,6 +97,15 @@ pub fn expand_macros(expr: Expr) -> Expr {
         Expr::Apply(expr) => Expr::Apply(Box::new(expand_macros(*expr))),
         Expr::GroupBy(expr) => Expr::GroupBy(Box::new(expand_macros(*expr))),
         
+        // Function calls need recursive expansion of arguments
+        Expr::FunctionCall(call_data) => {
+            let expanded_args: Vec<EdnValue> = call_data.into_iter().map(|arg| {
+                // For now, just return the arg as-is since we don't expand EDN values
+                arg
+            }).collect();
+            Expr::FunctionCall(expanded_args)
+        }
+        
         // All other expressions remain unchanged
         expr => expr,
     }
@@ -115,9 +132,9 @@ fn thread_into_function(value: Expr, func: Expr, first_position: bool) -> Expr {
         Expr::IsBoolean => apply_function_to_value("boolean?", value),
         Expr::Frequencies => apply_function_to_value("frequencies", value),
         
-        // For keyword access, create a get operation
+        // For keyword access, create a keyword get operation with the threaded value
         Expr::KeywordAccess(name) => {
-            Expr::Get(EdnValue::Keyword(name))
+            Expr::KeywordGet(name, Box::new(value))
         }
         
         // For functions that take arguments, thread the value appropriately
@@ -155,9 +172,9 @@ fn thread_into_function(value: Expr, func: Expr, first_position: bool) -> Expr {
     }
 }
 
-/// Apply a simple function to a value by creating the appropriate expression
+/// Apply a simple function to a value by creating a composition
 fn apply_function_to_value(func_name: &str, value: Expr) -> Expr {
-    match func_name {
+    let func_expr = match func_name {
         "first" => Expr::First,
         "last" => Expr::Last,
         "rest" => Expr::Rest,
@@ -171,8 +188,11 @@ fn apply_function_to_value(func_name: &str, value: Expr) -> Expr {
         "keyword?" => Expr::IsKeyword,
         "boolean?" => Expr::IsBoolean,
         "frequencies" => Expr::Frequencies,
-        _ => value, // Fallback - just return the value
-    }
+        _ => return value, // Fallback - just return the value
+    };
+    
+    // Create a composition that applies the function to the value
+    Expr::Comp(vec![value, func_expr])
 }
 
 /// Create a take expression with threaded collection

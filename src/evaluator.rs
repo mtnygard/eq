@@ -3,6 +3,7 @@ use crate::error::{EqError, EqResult};
 use crate::query::ast::Expr;
 use indexmap::IndexMap;
 
+
 /// Direct AST evaluator that treats expressions as functions
 /// Each expression takes a context (current data) and returns a value
 pub fn evaluate(expr: &Expr, context: &EdnValue) -> EqResult<EdnValue> {
@@ -28,27 +29,45 @@ pub fn evaluate(expr: &Expr, context: &EdnValue) -> EqResult<EdnValue> {
             Ok(target.get(&key).cloned().unwrap_or(EdnValue::Nil))
         }
         
+        Expr::KeywordGetWithDefault(name, expr, default_expr) => {
+            let target = evaluate(expr, context)?;
+            let key = EdnValue::Keyword(name.clone());
+            match target.get(&key) {
+                Some(value) => Ok(value.clone()),
+                None => evaluate(default_expr, context),
+            }
+        }
+        
         // Collection operations
-        Expr::First => {
-            match context {
+        Expr::First(coll_expr) => {
+            let coll = evaluate(coll_expr, context)?;
+            match coll {
                 EdnValue::Vector(v) => Ok(v.first().cloned().unwrap_or(EdnValue::Nil)),
                 EdnValue::List(l) => Ok(l.first().cloned().unwrap_or(EdnValue::Nil)),
-                EdnValue::WithMetadata { value, .. } => evaluate(expr, value),
+                EdnValue::WithMetadata { value, .. } => {
+                    let inner_expr = Expr::First(Box::new(Expr::Literal(*value)));
+                    evaluate(&inner_expr, context)
+                }
                 _ => Ok(EdnValue::Nil),
             }
         }
         
-        Expr::Last => {
-            match context {
+        Expr::Last(coll_expr) => {
+            let coll = evaluate(coll_expr, context)?;
+            match coll {
                 EdnValue::Vector(v) => Ok(v.last().cloned().unwrap_or(EdnValue::Nil)),
                 EdnValue::List(l) => Ok(l.last().cloned().unwrap_or(EdnValue::Nil)),
-                EdnValue::WithMetadata { value, .. } => evaluate(expr, value),
+                EdnValue::WithMetadata { value, .. } => {
+                    let inner_expr = Expr::Last(Box::new(Expr::Literal(*value)));
+                    evaluate(&inner_expr, context)
+                }
                 _ => Ok(EdnValue::Nil),
             }
         }
         
-        Expr::Rest => {
-            match context {
+        Expr::Rest(coll_expr) => {
+            let coll = evaluate(coll_expr, context)?;
+            match coll {
                 EdnValue::Vector(v) => {
                     if v.is_empty() {
                         Ok(EdnValue::Vector(Vec::new()))
@@ -63,20 +82,24 @@ pub fn evaluate(expr: &Expr, context: &EdnValue) -> EqResult<EdnValue> {
                         Ok(EdnValue::List(l[1..].to_vec()))
                     }
                 }
-                EdnValue::WithMetadata { value, .. } => evaluate(expr, value),
+                EdnValue::WithMetadata { value, .. } => {
+                    let inner_expr = Expr::Rest(Box::new(Expr::Literal(*value)));
+                    evaluate(&inner_expr, context)
+                }
                 _ => Ok(EdnValue::Vector(Vec::new())),
             }
         }
         
-        Expr::Take(n_expr) => {
+        Expr::Take(n_expr, coll_expr) => {
             let n = evaluate(n_expr, context)?;
+            let coll = evaluate(coll_expr, context)?;
             if let EdnValue::Integer(count) = n {
                 if count < 0 {
                     return Ok(EdnValue::Vector(Vec::new()));
                 }
                 
                 let count = count as usize;
-                match context {
+                match coll {
                     EdnValue::Vector(v) => {
                         Ok(EdnValue::Vector(v.iter().take(count).cloned().collect()))
                     }
@@ -84,8 +107,8 @@ pub fn evaluate(expr: &Expr, context: &EdnValue) -> EqResult<EdnValue> {
                         Ok(EdnValue::List(l.iter().take(count).cloned().collect()))
                     }
                     EdnValue::WithMetadata { value, .. } => {
-                        let result = evaluate(&Expr::Take(n_expr.clone()), value)?;
-                        Ok(result)
+                        let inner_expr = Expr::Take(n_expr.clone(), Box::new(Expr::Literal(*value)));
+                        evaluate(&inner_expr, context)
                     }
                     _ => Ok(EdnValue::Vector(Vec::new())),
                 }
@@ -94,15 +117,16 @@ pub fn evaluate(expr: &Expr, context: &EdnValue) -> EqResult<EdnValue> {
             }
         }
         
-        Expr::Drop(n_expr) => {
+        Expr::Drop(n_expr, coll_expr) => {
             let n = evaluate(n_expr, context)?;
+            let coll = evaluate(coll_expr, context)?;
             if let EdnValue::Integer(count) = n {
                 if count < 0 {
-                    return Ok(context.clone());
+                    return Ok(coll.clone());
                 }
                 
                 let count = count as usize;
-                match context {
+                match coll {
                     EdnValue::Vector(v) => {
                         Ok(EdnValue::Vector(v.iter().skip(count).cloned().collect()))
                     }
@@ -110,7 +134,8 @@ pub fn evaluate(expr: &Expr, context: &EdnValue) -> EqResult<EdnValue> {
                         Ok(EdnValue::List(l.iter().skip(count).cloned().collect()))
                     }
                     EdnValue::WithMetadata { value, .. } => {
-                        evaluate(&Expr::Drop(n_expr.clone()), value)
+                        let inner_expr = Expr::Drop(n_expr.clone(), Box::new(Expr::Literal(*value)));
+                        evaluate(&inner_expr, context)
                     }
                     _ => Ok(EdnValue::Vector(Vec::new())),
                 }
@@ -119,22 +144,25 @@ pub fn evaluate(expr: &Expr, context: &EdnValue) -> EqResult<EdnValue> {
             }
         }
         
-        Expr::Nth(n_expr) => {
+        Expr::Nth(n_expr, coll_expr) => {
             let n = evaluate(n_expr, context)?;
+            let coll = evaluate(coll_expr, context)?;
             if let EdnValue::Integer(index) = n {
-                Ok(context.get(&EdnValue::Integer(index)).cloned().unwrap_or(EdnValue::Nil))
+                Ok(coll.get(&EdnValue::Integer(index)).cloned().unwrap_or(EdnValue::Nil))
             } else {
                 Err(EqError::type_error("integer", n.type_name()))
             }
         }
         
-        Expr::Count => {
-            let count = context.count().unwrap_or(0) as i64;
+        Expr::Count(coll_expr) => {
+            let coll = evaluate(coll_expr, context)?;
+            let count = coll.count().unwrap_or(0) as i64;
             Ok(EdnValue::Integer(count))
         }
         
-        Expr::Keys => {
-            match context {
+        Expr::Keys(coll_expr) => {
+            let coll = evaluate(coll_expr, context)?;
+            match coll {
                 EdnValue::Map(m) => {
                     let keys: Vec<EdnValue> = m.keys().cloned().collect();
                     Ok(EdnValue::Vector(keys))
@@ -143,8 +171,9 @@ pub fn evaluate(expr: &Expr, context: &EdnValue) -> EqResult<EdnValue> {
             }
         }
         
-        Expr::Vals => {
-            match context {
+        Expr::Vals(coll_expr) => {
+            let coll = evaluate(coll_expr, context)?;
+            match coll {
                 EdnValue::Map(m) => {
                     let vals: Vec<EdnValue> = m.values().cloned().collect();
                     Ok(EdnValue::Vector(vals))
@@ -358,6 +387,11 @@ pub fn evaluate(expr: &Expr, context: &EdnValue) -> EqResult<EdnValue> {
         // Literals
         Expr::Literal(value) => Ok(value.clone()),
         
+        // Raw lists should be analyzed away before evaluation
+        Expr::List(_) => {
+            Err(EqError::query_error("Unanalyzed list expression found - analysis phase should handle all lists"))
+        }
+        
         // Macros should have been expanded before evaluation
         Expr::ThreadFirst(_) | Expr::ThreadLast(_) | Expr::When { .. } => {
             Err(EqError::query_error("Unexpanded macro found - macros should be expanded before evaluation".to_string()))
@@ -421,7 +455,7 @@ mod tests {
             EdnValue::Integer(3),
         ]);
         
-        let result = evaluate(&Expr::First, &input).unwrap();
+        let result = evaluate(&Expr::First(Box::new(Expr::Identity)), &input).unwrap();
         assert_eq!(result, EdnValue::Integer(1));
     }
 
@@ -433,7 +467,7 @@ mod tests {
             EdnValue::Integer(3),
         ]);
         
-        let result = evaluate(&Expr::Count, &input).unwrap();
+        let result = evaluate(&Expr::Count(Box::new(Expr::Identity)), &input).unwrap();
         assert_eq!(result, EdnValue::Integer(3));
     }
 
@@ -479,7 +513,7 @@ mod tests {
         ]);
         
         // Test take
-        let expr = Expr::Take(Box::new(Expr::Literal(EdnValue::Integer(2))));
+        let expr = Expr::Take(Box::new(Expr::Literal(EdnValue::Integer(2))), Box::new(Expr::Identity));
         let result = evaluate(&expr, &input).unwrap();
         assert_eq!(result, EdnValue::Vector(vec![
             EdnValue::Integer(1),
@@ -487,7 +521,7 @@ mod tests {
         ]));
         
         // Test drop
-        let expr = Expr::Drop(Box::new(Expr::Literal(EdnValue::Integer(2))));
+        let expr = Expr::Drop(Box::new(Expr::Literal(EdnValue::Integer(2))), Box::new(Expr::Identity));
         let result = evaluate(&expr, &input).unwrap();
         assert_eq!(result, EdnValue::Vector(vec![
             EdnValue::Integer(3),
@@ -499,8 +533,8 @@ mod tests {
     fn test_composition() {
         // Test composition: first then count (should fail since first returns a single value)
         let expr = Expr::Comp(vec![
-            Expr::First,
-            Expr::Count,
+            Expr::First(Box::new(Expr::Identity)),
+            Expr::Count(Box::new(Expr::Identity)),
         ]);
         
         let input = EdnValue::Vector(vec![

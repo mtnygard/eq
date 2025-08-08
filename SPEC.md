@@ -16,25 +16,27 @@ If no file is specified, `eq` reads from stdin.
 
 The filter language is based on Clojure syntax and functions:
 
+**Important**: All functions require explicit arguments. Use `.` to represent the current input value being processed.
+
 ### Basic Selectors
 
 - `.` - Identity (returns the input unchanged)
 - `(get :key)` - Get value by key from map
 - `(get 0)` - Get value by index from vector
 - `(get-in [:a :b])` - Navigate nested structures
-- `(:key)` - Keyword as function (shorthand for `(get :key)`)
+- `(:key data)` - Keyword as function (shorthand for `(get :key data)`)
 
 ### Collection Operations
 
-- `(first)` - Get first element
-- `(last)` - Get last element  
-- `(rest)` - Get all but first element
-- `(take n)` - Take first n elements
-- `(drop n)` - Drop first n elements
-- `(nth n)` - Get nth element (0-indexed)
-- `(count)` - Get count of collection
-- `(keys)` - Get keys of map
-- `(vals)` - Get values of map
+- `(first coll)` - Get first element of collection
+- `(last coll)` - Get last element of collection
+- `(rest coll)` - Get all but first element of collection
+- `(take n coll)` - Take first n elements of collection
+- `(drop n coll)` - Drop first n elements of collection
+- `(nth n coll)` - Get nth element of collection (0-indexed)
+- `(count coll)` - Get count of collection
+- `(keys map)` - Get keys of map
+- `(vals map)` - Get values of map
 
 ### Filtering and Mapping
 
@@ -45,9 +47,9 @@ The filter language is based on Clojure syntax and functions:
 
 ### Predicates
 
-- `(nil?)` - Test if value is nil
-- `(empty?)` - Test if collection is empty
-- `(contains? k)` - Test if map contains key
+- `(nil? value)` - Test if value is nil
+- `(empty? coll)` - Test if collection is empty
+- `(contains? key map)` - Test if map contains key
 - `(number?)`, `(string?)`, `(keyword?)`, `(boolean?)` - Type predicates
 - `(=)`, `(<)`, `(>)`, `(<=)`, `(>=)` - Comparison operators
 
