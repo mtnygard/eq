@@ -4,6 +4,44 @@ use std::fmt;
 use std::hash::{Hash, Hasher};
 // Remove dependency on CompiledQuery since we're not using it anymore
 
+/// Trait for sequential collection operations like first, last, rest, take, drop
+pub trait EdnSequential {
+    /// Get the first element of a sequential collection
+    fn first(&self) -> Option<&EdnValue>;
+    
+    /// Get the last element of a sequential collection  
+    fn last(&self) -> Option<&EdnValue>;
+    
+    /// Get all elements except the first (returns Vector for consistency)
+    fn rest(&self) -> EdnValue;
+    
+    /// Take the first n elements (returns Vector for consistency)
+    fn take(&self, n: usize) -> EdnValue;
+    
+    /// Drop the first n elements (returns Vector for consistency) 
+    fn drop(&self, n: usize) -> EdnValue;
+    
+    /// Helper to get collection as slice for implementations
+    fn as_slice(&self) -> &[EdnValue];
+}
+
+/// Trait for iterating over collection values
+pub trait EdnIterable {
+    /// Get an iterator over the values in this collection
+    fn iter_values(&self) -> Box<dyn Iterator<Item = &EdnValue> + '_>;
+}
+
+/// Trait for associative collections that support key/index-based access
+pub trait EdnAssociative {
+    /// Get value by key (for maps) or index (for sequences)
+    fn get(&self, key: &EdnValue) -> Option<&EdnValue>;
+    
+    /// Check if key/index exists (default implementation uses get)
+    fn contains_key(&self, key: &EdnValue) -> bool {
+        self.get(key).is_some()
+    }
+}
+
 /// EDN value types with zero-copy string optimization
 #[derive(Debug, Clone, PartialEq)]
 pub enum EdnValue {
@@ -72,8 +110,82 @@ impl EdnValue {
         }
     }
     
-    /// Get value by key (for maps) or index (for sequences)
-    pub fn get(&self, key: &EdnValue) -> Option<&EdnValue> {
+    /// Get nested value using a path of keys
+    pub fn get_in<I>(&self, path: I) -> Option<&EdnValue>
+    where
+        I: IntoIterator<Item = EdnValue>,
+    {
+        let mut current = Some(self);
+        for key in path {
+            current = current.and_then(|v| v.get(&key));
+        }
+        current
+    }
+}
+
+impl EdnSequential for EdnValue {
+    fn first(&self) -> Option<&EdnValue> {
+        match self {
+            EdnValue::Vector(v) => v.first(),
+            EdnValue::List(l) => l.first(),
+            EdnValue::WithMetadata { value, .. } => value.first(),
+            _ => None,
+        }
+    }
+    
+    fn last(&self) -> Option<&EdnValue> {
+        match self {
+            EdnValue::Vector(v) => v.last(),
+            EdnValue::List(l) => l.last(),
+            EdnValue::WithMetadata { value, .. } => value.last(),
+            _ => None,
+        }
+    }
+    
+    fn rest(&self) -> EdnValue {
+        let slice = self.as_slice();
+        if slice.is_empty() {
+            EdnValue::Vector(Vec::new())
+        } else {
+            EdnValue::Vector(slice[1..].to_vec())
+        }
+    }
+    
+    fn take(&self, n: usize) -> EdnValue {
+        let slice = self.as_slice();
+        EdnValue::Vector(slice.iter().take(n).cloned().collect())
+    }
+    
+    fn drop(&self, n: usize) -> EdnValue {
+        let slice = self.as_slice();
+        EdnValue::Vector(slice.iter().skip(n).cloned().collect())
+    }
+    
+    fn as_slice(&self) -> &[EdnValue] {
+        match self {
+            EdnValue::Vector(v) => v,
+            EdnValue::List(l) => l,
+            EdnValue::WithMetadata { value, .. } => value.as_slice(),
+            _ => &[],
+        }
+    }
+}
+
+impl EdnIterable for EdnValue {
+    fn iter_values(&self) -> Box<dyn Iterator<Item = &EdnValue> + '_> {
+        match self {
+            EdnValue::Vector(v) => Box::new(v.iter()),
+            EdnValue::List(l) => Box::new(l.iter()),
+            EdnValue::Map(m) => Box::new(m.values()),
+            EdnValue::Set(s) => Box::new(s.iter()),
+            EdnValue::WithMetadata { value, .. } => value.iter_values(),
+            _ => Box::new(std::iter::empty()),
+        }
+    }
+}
+
+impl EdnAssociative for EdnValue {
+    fn get(&self, key: &EdnValue) -> Option<&EdnValue> {
         match (self, key) {
             (EdnValue::Map(m), k) => m.get(k),
             (EdnValue::Vector(v), EdnValue::Integer(i)) => {
@@ -96,18 +208,6 @@ impl EdnValue {
             (EdnValue::WithMetadata { value, .. }, k) => value.get(k),
             _ => None,
         }
-    }
-    
-    /// Get nested value using a path of keys
-    pub fn get_in<I>(&self, path: I) -> Option<&EdnValue>
-    where
-        I: IntoIterator<Item = EdnValue>,
-    {
-        let mut current = Some(self);
-        for key in path {
-            current = current.and_then(|v| v.get(&key));
-        }
-        current
     }
 }
 

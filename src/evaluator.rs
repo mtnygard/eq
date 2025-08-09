@@ -1,4 +1,4 @@
-use crate::edn::EdnValue;
+use crate::edn::{EdnValue, EdnAssociative};
 use crate::error::{EqError, EqResult};
 use crate::query::ast::{Expr, FunctionRegistry, Environment, FunctionType};
 use crate::builtins::create_builtin_registry;

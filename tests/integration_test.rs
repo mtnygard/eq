@@ -116,7 +116,7 @@ fn test_error_handling() {
 fn test_null_input() {
     // Test null input mode - just test that nil input works
     let output = Command::new("./target/release/eq")
-        .args(&["-n", "(nil?)"])
+        .args(&["-n", "(nil? .)"])
         .output()
         .expect("Failed to execute eq");
     

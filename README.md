@@ -283,7 +283,7 @@ eq -s '(count .)' multi-users.edn
 
 **Null input (useful for generating data):**
 ```bash
-eq -n '(if (nil?) :is-null :not-null)'
+eq -n '(if (nil? .) :is-null :not-null)'
 # Output: :is-null
 ```
 

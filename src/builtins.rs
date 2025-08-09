@@ -1,4 +1,4 @@
-use crate::edn::EdnValue;
+use crate::edn::{EdnValue, EdnSequential, EdnIterable, EdnAssociative};
 use crate::error::{EqError, EqResult};
 use crate::query::ast::{FunctionRegistry, Expr};
 use indexmap::IndexMap;
@@ -108,13 +108,7 @@ fn builtin_first(args: &[EdnValue], _context: &EdnValue) -> EqResult<EdnValue> {
     }
     
     let target = &args[0];
-    
-    match target {
-        EdnValue::Vector(v) => Ok(v.first().cloned().unwrap_or(EdnValue::Nil)),
-        EdnValue::List(l) => Ok(l.first().cloned().unwrap_or(EdnValue::Nil)),
-        EdnValue::WithMetadata { value, .. } => builtin_first(&[(**value).clone()], _context),
-        _ => Ok(EdnValue::Nil),
-    }
+    Ok(target.first().cloned().unwrap_or(EdnValue::Nil))
 }
 
 fn builtin_last(args: &[EdnValue], _context: &EdnValue) -> EqResult<EdnValue> {
@@ -123,13 +117,7 @@ fn builtin_last(args: &[EdnValue], _context: &EdnValue) -> EqResult<EdnValue> {
     }
     
     let target = &args[0];
-
-    match target {
-        EdnValue::Vector(v) => Ok(v.last().cloned().unwrap_or(EdnValue::Nil)),
-        EdnValue::List(l) => Ok(l.last().cloned().unwrap_or(EdnValue::Nil)),
-        EdnValue::WithMetadata { value, .. } => builtin_last(&[(**value).clone()], _context),
-        _ => Ok(EdnValue::Nil),
-    }
+    Ok(target.last().cloned().unwrap_or(EdnValue::Nil))
 }
 
 fn builtin_rest(args: &[EdnValue], _context: &EdnValue) -> EqResult<EdnValue> {
@@ -138,25 +126,7 @@ fn builtin_rest(args: &[EdnValue], _context: &EdnValue) -> EqResult<EdnValue> {
     }
     
     let target = &args[0];
-
-    match target {
-        EdnValue::Vector(v) => {
-            if v.is_empty() {
-                Ok(EdnValue::Vector(Vec::new()))
-            } else {
-                Ok(EdnValue::Vector(v[1..].to_vec()))
-            }
-        }
-        EdnValue::List(l) => {
-            if l.is_empty() {
-                Ok(EdnValue::List(Vec::new()))
-            } else {
-                Ok(EdnValue::List(l[1..].to_vec()))
-            }
-        }
-        EdnValue::WithMetadata { value, .. } => builtin_rest(&[(**value).clone()], _context),
-        _ => Ok(EdnValue::Vector(Vec::new())),
-    }
+    Ok(target.rest())
 }
 
 fn builtin_take(args: &[EdnValue], _context: &EdnValue) -> EqResult<EdnValue> {
@@ -171,16 +141,8 @@ fn builtin_take(args: &[EdnValue], _context: &EdnValue) -> EqResult<EdnValue> {
         }
         
         let count = *count as usize;
-        match &args[1] {
-            EdnValue::Vector(v) => {
-                Ok(EdnValue::Vector(v.iter().take(count).cloned().collect()))
-            }
-            EdnValue::List(l) => {
-                Ok(EdnValue::List(l.iter().take(count).cloned().collect()))
-            }
-            EdnValue::WithMetadata { value, .. } => builtin_take(&[args[0].clone(), (**value).clone()], _context),
-            _ => Ok(EdnValue::Vector(Vec::new())),
-        }
+        let target = &args[1];
+        Ok(target.take(count))
     } else {
         Err(EqError::type_error("integer", args[0].type_name()))
     }
@@ -198,16 +160,8 @@ fn builtin_drop(args: &[EdnValue], _context: &EdnValue) -> EqResult<EdnValue> {
         }
         
         let count = *count as usize;
-        match &args[1] {
-            EdnValue::Vector(v) => {
-                Ok(EdnValue::Vector(v.iter().skip(count).cloned().collect()))
-            }
-            EdnValue::List(l) => {
-                Ok(EdnValue::List(l.iter().skip(count).cloned().collect()))
-            }
-            EdnValue::WithMetadata { value, .. } => builtin_drop(&[args[0].clone(), (**value).clone()], _context),
-            _ => Ok(EdnValue::Vector(Vec::new())),
-        }
+        let target = &args[1];
+        Ok(target.drop(count))
     } else {
         Err(EqError::type_error("integer", args[0].type_name()))
     }
@@ -296,10 +250,10 @@ fn builtin_contains(args: &[EdnValue], context: &EdnValue) -> EqResult<EdnValue>
     }
 
     let key = &args[0];
+    // Use trait method for maps, vectors, lists. Special case for sets.
     let result = match context {
-        EdnValue::Map(m) => m.contains_key(key),
-        EdnValue::Set(s) => s.contains(key),
-        _ => false,
+        EdnValue::Set(s) => s.contains(key), // Set uses contains, not contains_key
+        _ => context.contains_key(key),      // All other associative types
     };
     Ok(EdnValue::Bool(result))
 }
@@ -480,30 +434,16 @@ fn builtin_frequencies(args: &[EdnValue], _context: &EdnValue) -> EqResult<EdnVa
     }
     
     let target = &args[0];
-
-    match target {
-        EdnValue::Vector(v) => {
-            let mut freq_map = IndexMap::new();
-            for item in v {
-                let count = freq_map.get(item).cloned().unwrap_or(EdnValue::Integer(0));
-                if let EdnValue::Integer(n) = count {
-                    freq_map.insert(item.clone(), EdnValue::Integer(n + 1));
-                }
-            }
-            Ok(EdnValue::Map(freq_map))
+    let mut freq_map = IndexMap::new();
+    
+    for item in target.iter_values() {
+        let count = freq_map.get(item).cloned().unwrap_or(EdnValue::Integer(0));
+        if let EdnValue::Integer(n) = count {
+            freq_map.insert(item.clone(), EdnValue::Integer(n + 1));
         }
-        EdnValue::List(l) => {
-            let mut freq_map = IndexMap::new();
-            for item in l {
-                let count = freq_map.get(item).cloned().unwrap_or(EdnValue::Integer(0));
-                if let EdnValue::Integer(n) = count {
-                    freq_map.insert(item.clone(), EdnValue::Integer(n + 1));
-                }
-            }
-            Ok(EdnValue::Map(freq_map))
-        }
-        _ => Ok(EdnValue::Map(IndexMap::new())),
     }
+    
+    Ok(EdnValue::Map(freq_map))
 }
 
 /// Compare two values for ordering
