@@ -1,9 +1,0 @@
-{:name         :hagen-expire-issuances
- :service      :hagen
- :frequency    (daily (at 6 5))
- :environments {:staging #nu/prototypes-for [:staging :sharded]
-                #_#_:prod    #nu/prototypes-for [:prod :sharded]}
- :producer     {:topic        "HAGEN.RUN-JOB"
-                :content-type :edn
-                :message      {:job {:reference-date (time/yesterday)
-                                     :type           :expire-issuances}}}}

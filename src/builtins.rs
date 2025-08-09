@@ -102,51 +102,42 @@ fn builtin_get_in(args: &[EdnValue], context: &EdnValue) -> EqResult<EdnValue> {
 }
 
 // Collection operations
-fn builtin_first(args: &[EdnValue], context: &EdnValue) -> EqResult<EdnValue> {
-    // For collection functions, if we get one argument and it's the same as context,
-    // we're operating on the context (this handles (first .) pattern)
-    let target = if args.is_empty() {
-        context
-    } else if args.len() == 1 {
-        // Use the provided argument as the target
-        &args[0]
-    } else {
-        return Err(EqError::query_error("first expects 0 or 1 argument".to_string()));
-    };
+fn builtin_first(args: &[EdnValue], _context: &EdnValue) -> EqResult<EdnValue> {
+    if args.len() != 1 {
+        return Err(EqError::query_error("first expects exactly 1 argument".to_string()));
+    }
+    
+    let target = &args[0];
     
     match target {
         EdnValue::Vector(v) => Ok(v.first().cloned().unwrap_or(EdnValue::Nil)),
         EdnValue::List(l) => Ok(l.first().cloned().unwrap_or(EdnValue::Nil)),
-        EdnValue::WithMetadata { value, .. } => builtin_first(&[(**value).clone()], context),
+        EdnValue::WithMetadata { value, .. } => builtin_first(&[(**value).clone()], _context),
         _ => Ok(EdnValue::Nil),
     }
 }
 
-fn builtin_last(args: &[EdnValue], context: &EdnValue) -> EqResult<EdnValue> {
-    let target = if args.is_empty() {
-        context
-    } else if args.len() == 1 {
-        &args[0]
-    } else {
-        return Err(EqError::query_error("last expects 0 or 1 argument".to_string()));
-    };
+fn builtin_last(args: &[EdnValue], _context: &EdnValue) -> EqResult<EdnValue> {
+    if args.len() != 1 {
+        return Err(EqError::query_error("last expects exactly 1 argument".to_string()));
+    }
+    
+    let target = &args[0];
 
     match target {
         EdnValue::Vector(v) => Ok(v.last().cloned().unwrap_or(EdnValue::Nil)),
         EdnValue::List(l) => Ok(l.last().cloned().unwrap_or(EdnValue::Nil)),
-        EdnValue::WithMetadata { value, .. } => builtin_last(&[(**value).clone()], context),
+        EdnValue::WithMetadata { value, .. } => builtin_last(&[(**value).clone()], _context),
         _ => Ok(EdnValue::Nil),
     }
 }
 
-fn builtin_rest(args: &[EdnValue], context: &EdnValue) -> EqResult<EdnValue> {
-    let target = if args.is_empty() {
-        context
-    } else if args.len() == 1 {
-        &args[0]
-    } else {
-        return Err(EqError::query_error("rest expects 0 or 1 argument".to_string()));
-    };
+fn builtin_rest(args: &[EdnValue], _context: &EdnValue) -> EqResult<EdnValue> {
+    if args.len() != 1 {
+        return Err(EqError::query_error("rest expects exactly 1 argument".to_string()));
+    }
+    
+    let target = &args[0];
 
     match target {
         EdnValue::Vector(v) => {
@@ -163,7 +154,7 @@ fn builtin_rest(args: &[EdnValue], context: &EdnValue) -> EqResult<EdnValue> {
                 Ok(EdnValue::List(l[1..].to_vec()))
             }
         }
-        EdnValue::WithMetadata { value, .. } => builtin_rest(&[(**value).clone()], context),
+        EdnValue::WithMetadata { value, .. } => builtin_rest(&[(**value).clone()], _context),
         _ => Ok(EdnValue::Vector(Vec::new())),
     }
 }
@@ -234,27 +225,23 @@ fn builtin_nth(args: &[EdnValue], context: &EdnValue) -> EqResult<EdnValue> {
     }
 }
 
-fn builtin_count(args: &[EdnValue], context: &EdnValue) -> EqResult<EdnValue> {
-    let target = if args.is_empty() {
-        context
-    } else if args.len() == 1 {
-        &args[0]
-    } else {
-        return Err(EqError::query_error("count expects 0 or 1 argument".to_string()));
-    };
+fn builtin_count(args: &[EdnValue], _context: &EdnValue) -> EqResult<EdnValue> {
+    if args.len() != 1 {
+        return Err(EqError::query_error("count expects exactly 1 argument".to_string()));
+    }
+    
+    let target = &args[0];
 
     let count = target.count().unwrap_or(0) as i64;
     Ok(EdnValue::Integer(count))
 }
 
-fn builtin_keys(args: &[EdnValue], context: &EdnValue) -> EqResult<EdnValue> {
-    let target = if args.is_empty() {
-        context
-    } else if args.len() == 1 {
-        &args[0]
-    } else {
-        return Err(EqError::query_error("keys expects 0 or 1 argument".to_string()));
-    };
+fn builtin_keys(args: &[EdnValue], _context: &EdnValue) -> EqResult<EdnValue> {
+    if args.len() != 1 {
+        return Err(EqError::query_error("keys expects exactly 1 argument".to_string()));
+    }
+    
+    let target = &args[0];
 
     match target {
         EdnValue::Map(m) => {
@@ -265,14 +252,12 @@ fn builtin_keys(args: &[EdnValue], context: &EdnValue) -> EqResult<EdnValue> {
     }
 }
 
-fn builtin_vals(args: &[EdnValue], context: &EdnValue) -> EqResult<EdnValue> {
-    let target = if args.is_empty() {
-        context
-    } else if args.len() == 1 {
-        &args[0]
-    } else {
-        return Err(EqError::query_error("vals expects 0 or 1 argument".to_string()));
-    };
+fn builtin_vals(args: &[EdnValue], _context: &EdnValue) -> EqResult<EdnValue> {
+    if args.len() != 1 {
+        return Err(EqError::query_error("vals expects exactly 1 argument".to_string()));
+    }
+    
+    let target = &args[0];
 
     match target {
         EdnValue::Map(m) => {
@@ -284,26 +269,22 @@ fn builtin_vals(args: &[EdnValue], context: &EdnValue) -> EqResult<EdnValue> {
 }
 
 // Predicates
-fn builtin_is_nil(args: &[EdnValue], context: &EdnValue) -> EqResult<EdnValue> {
-    let target = if args.is_empty() {
-        context
-    } else if args.len() == 1 {
-        &args[0]
-    } else {
-        return Err(EqError::query_error("nil? expects 0 or 1 argument".to_string()));
-    };
+fn builtin_is_nil(args: &[EdnValue], _context: &EdnValue) -> EqResult<EdnValue> {
+    if args.len() != 1 {
+        return Err(EqError::query_error("nil? expects exactly 1 argument".to_string()));
+    }
+    
+    let target = &args[0];
 
     Ok(EdnValue::Bool(matches!(target, EdnValue::Nil)))
 }
 
-fn builtin_is_empty(args: &[EdnValue], context: &EdnValue) -> EqResult<EdnValue> {
-    let target = if args.is_empty() {
-        context
-    } else if args.len() == 1 {
-        &args[0]
-    } else {
-        return Err(EqError::query_error("empty? expects 0 or 1 argument".to_string()));
-    };
+fn builtin_is_empty(args: &[EdnValue], _context: &EdnValue) -> EqResult<EdnValue> {
+    if args.len() != 1 {
+        return Err(EqError::query_error("empty? expects exactly 1 argument".to_string()));
+    }
+    
+    let target = &args[0];
 
     let result = target.count().map(|c| c == 0).unwrap_or(false);
     Ok(EdnValue::Bool(result))
@@ -323,50 +304,42 @@ fn builtin_contains(args: &[EdnValue], context: &EdnValue) -> EqResult<EdnValue>
     Ok(EdnValue::Bool(result))
 }
 
-fn builtin_is_number(args: &[EdnValue], context: &EdnValue) -> EqResult<EdnValue> {
-    let target = if args.is_empty() {
-        context
-    } else if args.len() == 1 {
-        &args[0]
-    } else {
-        return Err(EqError::query_error("number? expects 0 or 1 argument".to_string()));
-    };
+fn builtin_is_number(args: &[EdnValue], _context: &EdnValue) -> EqResult<EdnValue> {
+    if args.len() != 1 {
+        return Err(EqError::query_error("number? expects exactly 1 argument".to_string()));
+    }
+    
+    let target = &args[0];
 
     Ok(EdnValue::Bool(matches!(target, EdnValue::Integer(_) | EdnValue::Float(_))))
 }
 
-fn builtin_is_string(args: &[EdnValue], context: &EdnValue) -> EqResult<EdnValue> {
-    let target = if args.is_empty() {
-        context
-    } else if args.len() == 1 {
-        &args[0]
-    } else {
-        return Err(EqError::query_error("string? expects 0 or 1 argument".to_string()));
-    };
+fn builtin_is_string(args: &[EdnValue], _context: &EdnValue) -> EqResult<EdnValue> {
+    if args.len() != 1 {
+        return Err(EqError::query_error("string? expects exactly 1 argument".to_string()));
+    }
+    
+    let target = &args[0];
 
     Ok(EdnValue::Bool(matches!(target, EdnValue::String(_))))
 }
 
-fn builtin_is_keyword(args: &[EdnValue], context: &EdnValue) -> EqResult<EdnValue> {
-    let target = if args.is_empty() {
-        context
-    } else if args.len() == 1 {
-        &args[0]
-    } else {
-        return Err(EqError::query_error("keyword? expects 0 or 1 argument".to_string()));
-    };
+fn builtin_is_keyword(args: &[EdnValue], _context: &EdnValue) -> EqResult<EdnValue> {
+    if args.len() != 1 {
+        return Err(EqError::query_error("keyword? expects exactly 1 argument".to_string()));
+    }
+    
+    let target = &args[0];
 
     Ok(EdnValue::Bool(matches!(target, EdnValue::Keyword(_))))
 }
 
-fn builtin_is_boolean(args: &[EdnValue], context: &EdnValue) -> EqResult<EdnValue> {
-    let target = if args.is_empty() {
-        context
-    } else if args.len() == 1 {
-        &args[0]
-    } else {
-        return Err(EqError::query_error("boolean? expects 0 or 1 argument".to_string()));
-    };
+fn builtin_is_boolean(args: &[EdnValue], _context: &EdnValue) -> EqResult<EdnValue> {
+    if args.len() != 1 {
+        return Err(EqError::query_error("boolean? expects exactly 1 argument".to_string()));
+    }
+    
+    let target = &args[0];
 
     Ok(EdnValue::Bool(matches!(target, EdnValue::Bool(_))))
 }
@@ -496,14 +469,12 @@ fn builtin_select(_args: &[EdnValue], _context: &EdnValue) -> EqResult<EdnValue>
 }
 
 // Aggregation
-fn builtin_frequencies(args: &[EdnValue], context: &EdnValue) -> EqResult<EdnValue> {
-    let target = if args.is_empty() {
-        context
-    } else if args.len() == 1 {
-        &args[0]
-    } else {
-        return Err(EqError::query_error("frequencies expects 0 or 1 argument".to_string()));
-    };
+fn builtin_frequencies(args: &[EdnValue], _context: &EdnValue) -> EqResult<EdnValue> {
+    if args.len() != 1 {
+        return Err(EqError::query_error("frequencies expects exactly 1 argument".to_string()));
+    }
+    
+    let target = &args[0];
 
     match target {
         EdnValue::Vector(v) => {

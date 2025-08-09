@@ -184,7 +184,7 @@ mod tests {
         
         let expr = Expr::Function {
             name: "first".to_string(),
-            args: vec![],
+            args: vec![Expr::Symbol(".".to_string())],
         };
         
         let result = evaluate(&expr, &input).unwrap();
@@ -201,7 +201,7 @@ mod tests {
         
         let expr = Expr::Function {
             name: "count".to_string(),
-            args: vec![],
+            args: vec![Expr::Symbol(".".to_string())],
         };
         
         let result = evaluate(&expr, &input).unwrap();
@@ -213,7 +213,7 @@ mod tests {
         // Test is-nil
         let nil_expr = Expr::Function {
             name: "nil?".to_string(),
-            args: vec![],
+            args: vec![Expr::Symbol(".".to_string())],
         };
         let result = evaluate(&nil_expr, &EdnValue::Nil).unwrap();
         assert_eq!(result, EdnValue::Bool(true));
@@ -224,7 +224,7 @@ mod tests {
         // Test is-number
         let number_expr = Expr::Function {
             name: "number?".to_string(),
-            args: vec![],
+            args: vec![Expr::Symbol(".".to_string())],
         };
         let result = evaluate(&number_expr, &EdnValue::Integer(42)).unwrap();
         assert_eq!(result, EdnValue::Bool(true));
@@ -292,11 +292,11 @@ mod tests {
         let expr = Expr::Comp(vec![
             Expr::Function {
                 name: "first".to_string(),
-                args: vec![],
+                args: vec![Expr::Symbol(".".to_string())],
             },
             Expr::Function {
                 name: "count".to_string(),
-                args: vec![],
+                args: vec![Expr::Symbol(".".to_string())],
             },
         ]);
         
@@ -317,7 +317,7 @@ mod tests {
             args: vec![
                 Expr::Function {
                     name: "nil?".to_string(),
-                    args: vec![],
+                    args: vec![Expr::Symbol(".".to_string())],
                 },
                 Expr::Literal(EdnValue::String("it's nil".to_string())),
                 Expr::Literal(EdnValue::String("not nil".to_string())),
@@ -342,7 +342,7 @@ mod tests {
         
         let expr = Expr::Function {
             name: "frequencies".to_string(),
-            args: vec![],
+            args: vec![Expr::Symbol(".".to_string())],
         };
         
         let result = evaluate(&expr, &input).unwrap();
