@@ -32,15 +32,21 @@
 ```
 ┌─────────────────┐    ┌──────────────┐    ┌─────────────────┐
 │   CLI Parser    │────│    Core      │────│   Output        │
-│                 │    │   Engine     │    │  Formatter      │
+│   (clap-based)  │    │   Engine     │    │  Formatter      │
 └─────────────────┘    └──────────────┘    └─────────────────┘
                               │
                     ┌─────────┼─────────┐
                     │         │         │
             ┌───────▼────┐ ┌──▼───┐ ┌───▼──────┐
-            │ EDN Parser │ │Query │ │Streaming │
-            │            │ │ VM   │ │ Engine   │
+            │ EDN Parser │ │Query │ │File      │
+            │            │ │Engine│ │Discovery │
             └────────────┘ └──────┘ └──────────┘
+                                          │
+                                    ┌─────▼─────┐
+                                    │   Glob    │
+                                    │  Pattern  │
+                                    │ Matching  │
+                                    └───────────┘
 ```
 
 ## Component Design
@@ -55,13 +61,24 @@
 
 **Key Structures**:
 ```rust
-pub struct Config {
+pub struct Args {
     pub filter: String,
     pub files: Vec<PathBuf>,
-    pub output_format: OutputFormat,
     pub compact: bool,
     pub raw_output: bool,
-    // ... other options
+    pub raw_input: bool,
+    pub slurp: bool,
+    pub null_input: bool,
+    pub exit_status: bool,
+    pub from_file: Option<PathBuf>,
+    pub tab: bool,
+    pub indent: usize,
+    pub debug: bool,
+    pub verbose: bool,
+    pub with_filename: bool,
+    pub recursive: bool,
+    pub glob_pattern: String,
+    pub suppress_nil: bool,
 }
 ```
 
@@ -96,98 +113,92 @@ pub enum EdnValue {
 - `IndexMap` to preserve insertion order in maps
 - Lazy parsing for streaming scenarios
 
-### 3. Query Compiler (`query/`)
-**Responsibility**: Parse and compile filter expressions to bytecode
+### 3. Query Engine (`query/`, `evaluator.rs`)
+**Responsibility**: Parse and evaluate filter expressions
 
-**Architecture**:
+**Current Implementation**:
+- Direct AST evaluation (no bytecode compilation yet)
+- Recursive descent parser for Clojure-like syntax
+- Built-in function registry with extensible design
+
 ```rust
-// Abstract Syntax Tree
-pub enum Expr {
+// Current AST structure (simplified)
+pub enum QueryNode {
     Identity,
-    Get(GetExpr),
+    Get(String),
     GetIn(Vec<EdnValue>),
-    Filter(Box<Expr>),
-    Map(Box<Expr>),
+    FunctionCall { name: String, args: Vec<QueryNode> },
     // ... other operations
 }
-
-// Compiled bytecode for execution
-pub enum OpCode {
-    Push(EdnValue),
-    Get,
-    GetIn(u8), // operand count
-    Filter,
-    Map,
-    // ... corresponding ops
-}
-
-pub struct CompiledQuery {
-    bytecode: Vec<OpCode>,
-    constants: Vec<EdnValue>,
-}
 ```
 
-**Compilation Pipeline**:
-1. **Lexer**: Tokenize filter string
-2. **Parser**: Build AST from tokens  
-3. **Compiler**: Generate bytecode from AST
-4. **Optimizer**: Optimize bytecode (constant folding, dead code elimination)
+**Evaluation Pipeline**:
+1. **Parser**: Parse filter string into AST
+2. **Evaluator**: Direct evaluation of AST nodes against input data
+3. **Built-ins**: Function registry for core operations
 
-### 4. Query VM (`vm/`)
-**Responsibility**: Execute compiled queries efficiently
+*Note: Bytecode compilation and VM are architectural future goals*
+
+### 4. Function Registry (`evaluator.rs`)
+**Responsibility**: Manage built-in and user-defined functions
 
 **Design**:
-- Stack-based virtual machine
-- Minimal allocation during execution
-- Built-in streaming support for large collections
+- Global function registry initialized at startup
+- Type-safe function signatures
+- Extensible for future plugin system
 
 ```rust
-pub struct QueryVM {
-    stack: Vec<EdnValue>,
-    constants: Vec<EdnValue>,
-    pc: usize, // program counter
-}
+pub type BuiltinFunction = fn(&[EdnValue]) -> Result<EdnValue, EvaluationError>;
 
-impl QueryVM {
-    pub fn execute(&mut self, bytecode: &[OpCode], input: EdnValue) -> Result<EdnValue> {
-        // Execute bytecode instructions
-    }
-    
-    pub fn execute_streaming<R: Read>(&mut self, bytecode: &[OpCode], input: R) -> impl Stream<Item = EdnValue> {
-        // Streaming execution for large inputs
-    }
+pub struct FunctionRegistry {
+    functions: HashMap<String, BuiltinFunction>,
 }
 ```
 
-### 5. Streaming Engine (`stream/`)
-**Responsibility**: Handle large files without loading entirely into memory
+### 5. Current File Processing
+**Responsibility**: Process individual files and handle I/O
+
+**Current Implementation**:
+- File-by-file processing (streaming is a future goal)
+- Memory-mapped files for large inputs
+- Error handling with context preservation
+
+```rust
+// Current approach - processes entire file into memory
+pub fn process_file(path: &Path, query: &str) -> Result<EdnValue, EqError> {
+    let content = std::fs::read_to_string(path)?;
+    let parsed = parse_edn(&content)?;
+    evaluate_query(query, parsed)
+}
+```
+
+*Note: True streaming implementation is planned for future versions*
+
+### 6. File Discovery (`main.rs`)
+**Responsibility**: Find and filter files based on glob patterns and recursion settings
 
 **Implementation**:
-- Async iterators over EDN values
-- Backpressure handling
-- Chunked processing for arrays/vectors
+- Uses `glob` crate for pattern matching
+- `walkdir` for recursive directory traversal
+- Supports both file arguments and directory scanning
+- Integrates with CLI flags for recursive search and pattern filtering
 
 ```rust
-pub trait EdnStream {
-    type Item = Result<EdnValue, EdnError>;
-    
-    fn next(&mut self) -> Option<Self::Item>;
-}
-
-pub struct FileEdnStream {
-    reader: BufReader<File>,
-    parser: StreamingEdnParser,
+fn find_files_recursive(paths: &[PathBuf], pattern: &str, recursive: bool) -> EqResult<Vec<PathBuf>> {
+    let glob_pattern = Pattern::new(pattern)?;
+    // Implementation handles recursive traversal and pattern matching
 }
 ```
 
-### 6. Output Formatter (`output/`)
+### 7. Output Formatter (`output/`)
 **Responsibility**: Serialize results back to EDN format
 
 **Features**:
 - Pretty printing with configurable indentation
 - Compact output mode
 - Raw string output mode
-- Preserve comments when possible
+- Optional filename prefixing (like grep -H)
+- Nil suppression option
 
 ## Memory Management Strategy
 
@@ -253,9 +264,9 @@ strip = true
 
 ### Distribution Strategy
 - GitHub Releases with pre-built binaries
-- Package managers (Homebrew, Cargo, apt/yum)
-- Container images for CI/CD usage
-- WebAssembly build for browser usage
+- Cargo for Rust ecosystem distribution
+- Package managers (Homebrew, apt/yum) - future consideration
+- Container images for CI/CD usage - future consideration
 
 ### Cross-Compilation Targets
 - `x86_64-unknown-linux-gnu`

@@ -81,15 +81,21 @@ The filter language is based on Clojure syntax and functions:
 - `-s, --slurp` - Read entire input stream into array
 - `-n, --null-input` - Don't read input; filter gets nil input
 
+### File Processing
+- `-r, --recursive` - Recursively search directories for files
+- `-p, --pattern <PATTERN>` - Glob pattern for file matching (default: "*.edn")
+- `-H, --with-filename` - Print filename for each output line (like grep -H)
+
 ### Error Handling
 - `-e, --exit-status` - Set exit status based on output
 - `-f, --from-file file` - Read filter from file
 - `--tab` - Use tabs for indentation
 - `--indent n` - Use n spaces for indentation (default: 2)
+- `--suppress-nil` - Suppress output when query result is nil
 
 ### Debugging
 - `--debug` - Show debug information
-- `--verbose` - Verbose output
+- `-v, --verbose` - Verbose output
 
 ## Examples
 
@@ -134,6 +140,15 @@ echo '[{:type :cat :name "Fluffy"} {:type :dog :name "Rex"} {:type :cat :name "W
 ```bash
 # Process multiple files
 eq '(map :id .)' data1.edn data2.edn
+
+# Process files recursively in directories
+eq -r '(count .)' ./data/
+
+# Use custom glob pattern for file matching
+eq -r -p '*.json' '.' ./data/
+
+# Show filenames with output (like grep -H)
+eq -H '(:name .)' *.edn
 
 # Read filter from file
 eq -f query.eq data.edn

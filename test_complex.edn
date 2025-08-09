@@ -1,3 +1,0 @@
-[{:name "Alice" :age 30 :skills [:clojure :rust]}
- {:name "Bob" :age 25 :skills [:javascript :python]}
- {:name "Charlie" :age 35 :skills [:rust :go :clojure]}]

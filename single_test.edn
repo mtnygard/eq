@@ -1,1 +1,0 @@
-{:ingress {:type :internet-facing} :name "web-server"}

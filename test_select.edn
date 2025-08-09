@@ -1,4 +1,0 @@
-{:ingress {:type :internet-facing} :name "web-server"}
-{:ingress {:type :internal} :name "db-server"}
-{:ingress {:type :internet-facing} :name "api-server"}
-{:other-service {:type :something} :name "other"}
