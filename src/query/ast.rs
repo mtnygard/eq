@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 /// Type alias for builtin function implementations
-pub type BuiltinFn = Arc<dyn Fn(&[EdnValue], &EdnValue) -> crate::error::EqResult<EdnValue> + Send + Sync>;
+pub type BuiltinFn = Arc<dyn Fn(&[EdnValue]) -> crate::error::EqResult<EdnValue> + Send + Sync>;
 
 /// Type alias for special form implementations (take unevaluated expressions)
 pub type SpecialFormFn = Arc<dyn Fn(&[Expr], &EdnValue, &Environment) -> crate::error::EqResult<EdnValue> + Send + Sync>;
@@ -70,7 +70,7 @@ impl FunctionRegistry {
 
     pub fn register<F>(&mut self, name: String, func: F)
     where
-        F: Fn(&[EdnValue], &EdnValue) -> crate::error::EqResult<EdnValue> + Send + Sync + 'static,
+        F: Fn(&[EdnValue]) -> crate::error::EqResult<EdnValue> + Send + Sync + 'static,
     {
         self.functions.insert(name, FunctionType::Regular(Arc::new(func)));
     }

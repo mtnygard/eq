@@ -419,6 +419,62 @@ mod tests {
     }
 
     #[test]
+    fn test_get_in_mixed_keys() {
+        // Create a structure with mixed keyword and integer access:
+        // {:skills [:clojure :rust :javascript] :profile {:scores [85 92 78]}}
+        let skills_vector = EdnValue::Vector(vec![
+            EdnValue::Keyword("clojure".to_string()),
+            EdnValue::Keyword("rust".to_string()),
+            EdnValue::Keyword("javascript".to_string()),
+        ]);
+        
+        let scores_vector = EdnValue::Vector(vec![
+            EdnValue::Integer(85),
+            EdnValue::Integer(92),
+            EdnValue::Integer(78),
+        ]);
+        
+        let mut profile_map = IndexMap::new();
+        profile_map.insert(EdnValue::Keyword("scores".to_string()), scores_vector);
+        
+        let mut root_map = IndexMap::new();
+        root_map.insert(EdnValue::Keyword("skills".to_string()), skills_vector);
+        root_map.insert(EdnValue::Keyword("profile".to_string()), EdnValue::Map(profile_map));
+        
+        let root = EdnValue::Map(root_map);
+        
+        // Test mixed path: keyword -> integer (accessing second skill)
+        let path1 = vec![
+            EdnValue::Keyword("skills".to_string()),
+            EdnValue::Integer(1)
+        ];
+        assert_eq!(root.get_in(path1), Some(&EdnValue::Keyword("rust".to_string())));
+        
+        // Test mixed path: keyword -> keyword -> integer (accessing first score)
+        let path2 = vec![
+            EdnValue::Keyword("profile".to_string()),
+            EdnValue::Keyword("scores".to_string()),
+            EdnValue::Integer(0)
+        ];
+        assert_eq!(root.get_in(path2), Some(&EdnValue::Integer(85)));
+        
+        // Test mixed path: keyword -> keyword -> integer (accessing last score with negative index)
+        let path3 = vec![
+            EdnValue::Keyword("profile".to_string()),
+            EdnValue::Keyword("scores".to_string()),
+            EdnValue::Integer(-1)
+        ];
+        assert_eq!(root.get_in(path3), Some(&EdnValue::Integer(78)));
+        
+        // Test invalid path
+        let invalid_path = vec![
+            EdnValue::Keyword("skills".to_string()),
+            EdnValue::Integer(10)
+        ];
+        assert_eq!(root.get_in(invalid_path), None);
+    }
+
+    #[test]
     fn test_display() {
         assert_eq!(format!("{}", EdnValue::Nil), "nil");
         assert_eq!(format!("{}", EdnValue::Bool(true)), "true");

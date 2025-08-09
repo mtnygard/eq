@@ -110,7 +110,7 @@ pub fn evaluate_with_env(expr: &Expr, context: &EdnValue, env: &Environment) -> 
                         }
                         
                         // Call the regular function
-                        func(&eval_args, context)
+                        func(&eval_args)
                     }
                     FunctionType::SpecialForm(special_func) => {
                         // Pass unevaluated arguments to special forms
