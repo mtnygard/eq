@@ -206,7 +206,7 @@ fn test_broken_queries() {
     
     assert!(!output.status.success());
     let stderr = String::from_utf8(output.stderr).unwrap();
-    assert!(stderr.contains("QueryError") || stderr.contains("takes exactly"));
+    assert!(stderr.contains("QueryError") || stderr.contains("expects"));
     
     // Test too many arguments
     let output = Command::new("./target/release/eq")
@@ -216,7 +216,7 @@ fn test_broken_queries() {
     
     assert!(!output.status.success());
     let stderr = String::from_utf8(output.stderr).unwrap();
-    assert!(stderr.contains("QueryError") || stderr.contains("takes exactly"));
+    assert!(stderr.contains("QueryError") || stderr.contains("expects"));
 }
 
 #[test]

@@ -13,6 +13,9 @@ mod analyzer;
 mod evaluator;
 mod output;
 mod builtins;
+mod primitives;
+mod formatter;
+mod collection_formatter;
 
 use cli::Args;
 use error::EqResult;
