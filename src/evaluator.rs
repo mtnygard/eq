@@ -235,17 +235,113 @@ mod tests {
 
     #[test]
     fn test_comparison() {
-        // Test equality
-        let expr = Expr::Function {
+        // Test equality with multiple arguments - all equal
+        let eq_expr = Expr::Function {
             name: "=".to_string(),
-            args: vec![Expr::Literal(EdnValue::Integer(42))],
+            args: vec![
+                Expr::Literal(EdnValue::Integer(42)),
+                Expr::Literal(EdnValue::Integer(42)),
+                Expr::Literal(EdnValue::Integer(42)),
+            ],
         };
-        
-        let result = evaluate(&expr, &EdnValue::Integer(42)).unwrap();
+        let result = evaluate(&eq_expr, &EdnValue::Nil).unwrap();
         assert_eq!(result, EdnValue::Bool(true));
         
-        let result = evaluate(&expr, &EdnValue::Integer(43)).unwrap();
+        // Test equality with multiple arguments - not all equal
+        let eq_false_expr = Expr::Function {
+            name: "=".to_string(),
+            args: vec![
+                Expr::Literal(EdnValue::Integer(42)),
+                Expr::Literal(EdnValue::Integer(42)),
+                Expr::Literal(EdnValue::Integer(43)),
+            ],
+        };
+        let result = evaluate(&eq_false_expr, &EdnValue::Nil).unwrap();
         assert_eq!(result, EdnValue::Bool(false));
+        
+        // Test 0-argument and 1-argument cases (should be true)
+        let empty_eq = Expr::Function { name: "=".to_string(), args: vec![] };
+        assert_eq!(evaluate(&empty_eq, &EdnValue::Nil).unwrap(), EdnValue::Bool(true));
+        
+        let single_eq = Expr::Function { 
+            name: "=".to_string(), 
+            args: vec![Expr::Literal(EdnValue::Integer(42))] 
+        };
+        assert_eq!(evaluate(&single_eq, &EdnValue::Nil).unwrap(), EdnValue::Bool(true));
+        
+        // Test < with multiple arguments
+        let lt_expr = Expr::Function {
+            name: "<".to_string(),
+            args: vec![
+                Expr::Literal(EdnValue::Integer(1)),
+                Expr::Literal(EdnValue::Integer(2)),
+                Expr::Literal(EdnValue::Integer(3)),
+            ],
+        };
+        let result = evaluate(&lt_expr, &EdnValue::Nil).unwrap();
+        assert_eq!(result, EdnValue::Bool(true));
+        
+        // Test < with descending sequence (should be false)
+        let lt_false_expr = Expr::Function {
+            name: "<".to_string(),
+            args: vec![
+                Expr::Literal(EdnValue::Integer(3)),
+                Expr::Literal(EdnValue::Integer(2)),
+                Expr::Literal(EdnValue::Integer(1)),
+            ],
+        };
+        let result = evaluate(&lt_false_expr, &EdnValue::Nil).unwrap();
+        assert_eq!(result, EdnValue::Bool(false));
+        
+        // Test <= with equal values (should be true)
+        let le_expr = Expr::Function {
+            name: "<=".to_string(),
+            args: vec![
+                Expr::Literal(EdnValue::Integer(1)),
+                Expr::Literal(EdnValue::Integer(3)),
+                Expr::Literal(EdnValue::Integer(2)),
+            ],
+        };
+        let result = evaluate(&le_expr, &EdnValue::Nil).unwrap();
+        assert_eq!(result, EdnValue::Bool(false));
+        
+        // Test > with descending sequence
+        let gt_expr = Expr::Function {
+            name: ">".to_string(),
+            args: vec![
+                Expr::Literal(EdnValue::Integer(5)),
+                Expr::Literal(EdnValue::Integer(3)),
+                Expr::Literal(EdnValue::Integer(1)),
+            ],
+        };
+        let result = evaluate(&gt_expr, &EdnValue::Nil).unwrap();
+        assert_eq!(result, EdnValue::Bool(true));
+        
+        // Test >= with equal values
+        let ge_expr = Expr::Function {
+            name: ">=".to_string(),
+            args: vec![
+                Expr::Literal(EdnValue::Integer(3)),
+                Expr::Literal(EdnValue::Integer(3)),
+                Expr::Literal(EdnValue::Integer(1)),
+            ],
+        };
+        let result = evaluate(&ge_expr, &EdnValue::Nil).unwrap();
+        assert_eq!(result, EdnValue::Bool(true));
+        
+        // Test 0-argument cases (should all be true)
+        let empty_lt = Expr::Function { name: "<".to_string(), args: vec![] };
+        assert_eq!(evaluate(&empty_lt, &EdnValue::Nil).unwrap(), EdnValue::Bool(true));
+        
+        let empty_gt = Expr::Function { name: ">".to_string(), args: vec![] };
+        assert_eq!(evaluate(&empty_gt, &EdnValue::Nil).unwrap(), EdnValue::Bool(true));
+        
+        // Test 1-argument cases (should all be true) 
+        let single_lt = Expr::Function { 
+            name: "<".to_string(), 
+            args: vec![Expr::Literal(EdnValue::Integer(42))] 
+        };
+        assert_eq!(evaluate(&single_lt, &EdnValue::Nil).unwrap(), EdnValue::Bool(true));
     }
 
     #[test]

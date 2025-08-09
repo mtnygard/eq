@@ -345,21 +345,14 @@ fn builtin_is_boolean(args: &[EdnValue], _context: &EdnValue) -> EqResult<EdnVal
 }
 
 // Comparison
-fn builtin_equal(args: &[EdnValue], context: &EdnValue) -> EqResult<EdnValue> {
+fn builtin_equal(args: &[EdnValue], _context: &EdnValue) -> EqResult<EdnValue> {
     match args.len() {
-        0 => {
-            // (=) with no args - always true (all zero items are equal)
+        0 | 1 => {
+            // (=) or (= a) - vacuously true  
             Ok(EdnValue::Bool(true))
-        }
-        1 => {
-            // (= value) - compare context with value
-            Ok(EdnValue::Bool(context == &args[0]))
         }
         _ => {
             // (= a b c ...) - all arguments must be equal
-            if args.is_empty() {
-                return Ok(EdnValue::Bool(true));
-            }
             let first = &args[0];
             let all_equal = args.iter().skip(1).all(|arg| arg == first);
             Ok(EdnValue::Bool(all_equal))
@@ -367,67 +360,79 @@ fn builtin_equal(args: &[EdnValue], context: &EdnValue) -> EqResult<EdnValue> {
     }
 }
 
-fn builtin_less_than(args: &[EdnValue], context: &EdnValue) -> EqResult<EdnValue> {
+fn builtin_less_than(args: &[EdnValue], _context: &EdnValue) -> EqResult<EdnValue> {
     match args.len() {
-        1 => {
-            // (< value) - compare context with value
-            let result = compare_values(context, &args[0])? < 0;
-            Ok(EdnValue::Bool(result))
+        0 | 1 => {
+            // (< ) or (< a) - vacuously true
+            Ok(EdnValue::Bool(true))
         }
-        2 => {
-            // (< a b) - compare a with b (threading form)
-            let result = compare_values(&args[0], &args[1])? < 0;
-            Ok(EdnValue::Bool(result))
+        _ => {
+            // (< a b c ...) - check that a < b < c < ...
+            for i in 0..args.len()-1 {
+                let result = compare_values(&args[i], &args[i+1])?;
+                if result >= 0 {
+                    return Ok(EdnValue::Bool(false));
+                }
+            }
+            Ok(EdnValue::Bool(true))
         }
-        _ => Err(EqError::query_error("< expects 1 or 2 arguments".to_string()))
     }
 }
 
-fn builtin_greater_than(args: &[EdnValue], context: &EdnValue) -> EqResult<EdnValue> {
+fn builtin_greater_than(args: &[EdnValue], _context: &EdnValue) -> EqResult<EdnValue> {
     match args.len() {
-        1 => {
-            // (> value) - compare context with value
-            let result = compare_values(context, &args[0])? > 0;
-            Ok(EdnValue::Bool(result))
+        0 | 1 => {
+            // (> ) or (> a) - vacuously true
+            Ok(EdnValue::Bool(true))
         }
-        2 => {
-            // (> a b) - compare a with b (threading form)
-            let result = compare_values(&args[0], &args[1])? > 0;
-            Ok(EdnValue::Bool(result))
+        _ => {
+            // (> a b c ...) - check that a > b > c > ...
+            for i in 0..args.len()-1 {
+                let result = compare_values(&args[i], &args[i+1])?;
+                if result <= 0 {
+                    return Ok(EdnValue::Bool(false));
+                }
+            }
+            Ok(EdnValue::Bool(true))
         }
-        _ => Err(EqError::query_error("> expects 1 or 2 arguments".to_string()))
     }
 }
 
-fn builtin_less_equal(args: &[EdnValue], context: &EdnValue) -> EqResult<EdnValue> {
+fn builtin_less_equal(args: &[EdnValue], _context: &EdnValue) -> EqResult<EdnValue> {
     match args.len() {
-        1 => {
-            // (<= value) - compare context with value
-            let result = compare_values(context, &args[0])? <= 0;
-            Ok(EdnValue::Bool(result))
+        0 | 1 => {
+            // (<= ) or (<= a) - vacuously true
+            Ok(EdnValue::Bool(true))
         }
-        2 => {
-            // (<= a b) - compare a with b (threading form)
-            let result = compare_values(&args[0], &args[1])? <= 0;
-            Ok(EdnValue::Bool(result))
+        _ => {
+            // (<= a b c ...) - check that a <= b <= c <= ...
+            for i in 0..args.len()-1 {
+                let result = compare_values(&args[i], &args[i+1])?;
+                if result > 0 {
+                    return Ok(EdnValue::Bool(false));
+                }
+            }
+            Ok(EdnValue::Bool(true))
         }
-        _ => Err(EqError::query_error("<= expects 1 or 2 arguments".to_string()))
     }
 }
 
-fn builtin_greater_equal(args: &[EdnValue], context: &EdnValue) -> EqResult<EdnValue> {
+fn builtin_greater_equal(args: &[EdnValue], _context: &EdnValue) -> EqResult<EdnValue> {
     match args.len() {
-        1 => {
-            // (>= value) - compare context with value
-            let result = compare_values(context, &args[0])? >= 0;
-            Ok(EdnValue::Bool(result))
+        0 | 1 => {
+            // (>= ) or (>= a) - vacuously true
+            Ok(EdnValue::Bool(true))
         }
-        2 => {
-            // (>= a b) - compare a with b (threading form)
-            let result = compare_values(&args[0], &args[1])? >= 0;
-            Ok(EdnValue::Bool(result))
+        _ => {
+            // (>= a b c ...) - check that a >= b >= c >= ...
+            for i in 0..args.len()-1 {
+                let result = compare_values(&args[i], &args[i+1])?;
+                if result < 0 {
+                    return Ok(EdnValue::Bool(false));
+                }
+            }
+            Ok(EdnValue::Bool(true))
         }
-        _ => Err(EqError::query_error(">= expects 1 or 2 arguments".to_string()))
     }
 }
 
