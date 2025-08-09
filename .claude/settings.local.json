@@ -22,7 +22,8 @@
       "Bash(echo:*)",
       "Bash(./target/debug/eq karma-police.edn)",
       "Bash(./target/debug/eq:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(ls:*)"
     ],
     "deny": []
   }

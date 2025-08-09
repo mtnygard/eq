@@ -1,5 +1,27 @@
 use std::process::Command;
 use std::fs;
+use std::env;
+
+fn get_binary_path() -> String {
+    // Check if we're running in release mode by looking for CARGO_TARGET_DIR or profile
+    let _profile = env::var("PROFILE").unwrap_or_else(|_| "debug".to_string());
+    let target_dir = env::var("CARGO_TARGET_DIR").unwrap_or_else(|_| "target".to_string());
+    
+    // First try debug binary (most common during testing)
+    let debug_path = format!("{}/debug/eq", target_dir);
+    if std::path::Path::new(&debug_path).exists() {
+        return debug_path;
+    }
+    
+    // Then try release binary
+    let release_path = format!("{}/release/eq", target_dir);
+    if std::path::Path::new(&release_path).exists() {
+        return release_path;
+    }
+    
+    // Default to debug path
+    debug_path
+}
 
 #[test]
 fn test_basic_operations() {
@@ -7,7 +29,7 @@ fn test_basic_operations() {
     fs::write("test_basic.edn", r#"{:name "Alice" :age 30}"#).unwrap();
     
     // Test identity
-    let output = Command::new("./target/release/eq")
+    let output = Command::new(&get_binary_path())
         .args(&[".", "test_basic.edn"])
         .output()
         .expect("Failed to execute eq");
@@ -18,7 +40,7 @@ fn test_basic_operations() {
     assert!(stdout.contains("30"));
     
     // Test keyword access
-    let output = Command::new("./target/release/eq")
+    let output = Command::new(&get_binary_path())
         .args(&["(:name .)", "test_basic.edn"])
         .output()
         .expect("Failed to execute eq");
@@ -37,7 +59,7 @@ fn test_collection_operations() {
     fs::write("test_array.edn", r#"[1 2 3 4 5]"#).unwrap();
     
     // Test first
-    let output = Command::new("./target/release/eq")
+    let output = Command::new(&get_binary_path())
         .args(&["(first .)", "test_array.edn"])
         .output()
         .expect("Failed to execute eq");
@@ -47,7 +69,7 @@ fn test_collection_operations() {
     assert_eq!(stdout.trim(), "1");
     
     // Test count
-    let output = Command::new("./target/release/eq")
+    let output = Command::new(&get_binary_path())
         .args(&["(count .)", "test_array.edn"])
         .output()
         .expect("Failed to execute eq");
@@ -66,7 +88,7 @@ fn test_compact_output() {
     fs::write("test_compact.edn", r#"{:a {:b {:c 42}}}"#).unwrap();
     
     // Test compact output
-    let output = Command::new("./target/release/eq")
+    let output = Command::new(&get_binary_path())
         .args(&["-c", ".", "test_compact.edn"])
         .output()
         .expect("Failed to execute eq");
@@ -86,7 +108,7 @@ fn test_raw_output() {
     fs::write("test_raw.edn", r#"{:message "Hello World"}"#).unwrap();
     
     // Test raw string output
-    let output = Command::new("./target/release/eq")
+    let output = Command::new(&get_binary_path())
         .args(&["--raw-output", "(:message .)", "test_raw.edn"])
         .output()
         .expect("Failed to execute eq");
@@ -102,7 +124,7 @@ fn test_raw_output() {
 #[test]
 fn test_error_handling() {
     // Test invalid query
-    let output = Command::new("./target/release/eq")
+    let output = Command::new(&get_binary_path())
         .args(&["(invalid-function)", "-n"]) // null input to avoid file issues
         .output()
         .expect("Failed to execute eq");
@@ -115,7 +137,7 @@ fn test_error_handling() {
 #[test]
 fn test_null_input() {
     // Test null input mode - just test that nil input works
-    let output = Command::new("./target/release/eq")
+    let output = Command::new(&get_binary_path())
         .args(&["-n", "(nil? .)"])
         .output()
         .expect("Failed to execute eq");
@@ -129,7 +151,7 @@ fn test_null_input() {
 fn test_broken_edn_files() {
     // Test unterminated string
     fs::write("test_broken1.edn", r#"{"unterminated string}"#).unwrap();
-    let output = Command::new("./target/release/eq")
+    let output = Command::new(&get_binary_path())
         .args(&[".", "test_broken1.edn"])
         .output()
         .expect("Failed to execute eq");
@@ -141,7 +163,7 @@ fn test_broken_edn_files() {
     
     // Test unterminated vector
     fs::write("test_broken2.edn", r#"[1 2 3"#).unwrap();
-    let output = Command::new("./target/release/eq")
+    let output = Command::new(&get_binary_path())
         .args(&[".", "test_broken2.edn"])
         .output()
         .expect("Failed to execute eq");
@@ -153,7 +175,7 @@ fn test_broken_edn_files() {
     
     // Test invalid map (odd number of elements)
     fs::write("test_broken3.edn", r#"{:key}"#).unwrap();
-    let output = Command::new("./target/release/eq")
+    let output = Command::new(&get_binary_path())
         .args(&[".", "test_broken3.edn"])
         .output()
         .expect("Failed to execute eq");
@@ -165,7 +187,7 @@ fn test_broken_edn_files() {
     
     // Test duplicate set elements  
     fs::write("test_broken4.edn", r#"#{1 1}"#).unwrap();
-    let output = Command::new("./target/release/eq")
+    let output = Command::new(&get_binary_path())
         .args(&[".", "test_broken4.edn"])
         .output()
         .expect("Failed to execute eq");
@@ -179,7 +201,7 @@ fn test_broken_edn_files() {
 #[test]
 fn test_broken_queries() {
     // Test empty parentheses
-    let output = Command::new("./target/release/eq")
+    let output = Command::new(&get_binary_path())
         .args(&["()", "-n"])
         .output()
         .expect("Failed to execute eq");
@@ -189,7 +211,7 @@ fn test_broken_queries() {
     assert!(stderr.contains("QueryError") || stderr.contains("Empty"));
     
     // Test unterminated parentheses
-    let output = Command::new("./target/release/eq")
+    let output = Command::new(&get_binary_path())
         .args(&["(first", "-n"])
         .output()
         .expect("Failed to execute eq");
@@ -199,7 +221,7 @@ fn test_broken_queries() {
     assert!(stderr.contains("Parse error") || stderr.contains("ParseError") || stderr.contains("Unterminated"));
     
     // Test invalid function arguments
-    let output = Command::new("./target/release/eq")
+    let output = Command::new(&get_binary_path())
         .args(&["(get)", "-n"])
         .output()
         .expect("Failed to execute eq");
@@ -209,7 +231,7 @@ fn test_broken_queries() {
     assert!(stderr.contains("QueryError") || stderr.contains("expects"));
     
     // Test too many arguments
-    let output = Command::new("./target/release/eq")
+    let output = Command::new(&get_binary_path())
         .args(&["(get :a :b :c)", "-n"])
         .output()
         .expect("Failed to execute eq");
@@ -223,7 +245,7 @@ fn test_broken_queries() {
 fn test_metadata_parsing() {
     // Test simple keyword metadata
     fs::write("test_metadata1.edn", r#"^:tag {:key "value"}"#).unwrap();
-    let output = Command::new("./target/release/eq")
+    let output = Command::new(&get_binary_path())
         .args(&[".", "test_metadata1.edn"])
         .output()
         .expect("Failed to execute eq");
@@ -236,7 +258,7 @@ fn test_metadata_parsing() {
     
     // Test map metadata with the user's example
     fs::write("test_metadata2.edn", r#"{:features ^{:replace true} #{:datomic :datomic-init}}"#).unwrap();
-    let output = Command::new("./target/release/eq")
+    let output = Command::new(&get_binary_path())
         .args(&[".", "test_metadata2.edn"])
         .output()
         .expect("Failed to execute eq");
@@ -249,7 +271,7 @@ fn test_metadata_parsing() {
     
     // Test accessing the value through metadata
     fs::write("test_metadata3.edn", r#"^{:doc "A set"} #{:a :b :c}"#).unwrap();
-    let output = Command::new("./target/release/eq")
+    let output = Command::new(&get_binary_path())
         .args(&["(count .)", "test_metadata3.edn"])
         .output()
         .expect("Failed to execute eq");
@@ -264,7 +286,7 @@ fn test_metadata_parsing() {
 fn test_discard_macro() {
     // Test discard in vector
     fs::write("test_discard1.edn", r#"[1 2 #_ 3 4]"#).unwrap();
-    let output = Command::new("./target/release/eq")
+    let output = Command::new(&get_binary_path())
         .args(&[".", "test_discard1.edn"])
         .output()
         .expect("Failed to execute eq");
@@ -276,7 +298,7 @@ fn test_discard_macro() {
     
     // Test discard in map
     fs::write("test_discard2.edn", r#"{:a 1 #_ :b #_ 2 :c 3}"#).unwrap();
-    let output = Command::new("./target/release/eq")
+    let output = Command::new(&get_binary_path())
         .args(&[".", "test_discard2.edn"])
         .output()
         .expect("Failed to execute eq");
@@ -290,7 +312,7 @@ fn test_discard_macro() {
     
     // Test discard in set
     fs::write("test_discard3.edn", r#"#{1 #_ 2 3}"#).unwrap();
-    let output = Command::new("./target/release/eq")
+    let output = Command::new(&get_binary_path())
         .args(&["(count .)", "test_discard3.edn"])
         .output()
         .expect("Failed to execute eq");
@@ -305,7 +327,7 @@ fn test_discard_macro() {
 fn test_builtin_tagged_literals() {
     // Test #inst
     fs::write("test_inst.edn", r#"#inst "2023-01-01T12:30:45Z""#).unwrap();
-    let output = Command::new("./target/release/eq")
+    let output = Command::new(&get_binary_path())
         .args(&[".", "test_inst.edn"])
         .output()
         .expect("Failed to execute eq");
@@ -317,7 +339,7 @@ fn test_builtin_tagged_literals() {
     
     // Test #uuid
     fs::write("test_uuid.edn", r#"#uuid "f81d4fae-7dec-11d0-a765-00a0c91e6bf6""#).unwrap();
-    let output = Command::new("./target/release/eq")
+    let output = Command::new(&get_binary_path())
         .args(&[".", "test_uuid.edn"])
         .output()
         .expect("Failed to execute eq");
@@ -329,7 +351,7 @@ fn test_builtin_tagged_literals() {
     
     // Test invalid formats
     fs::write("test_bad_inst.edn", r#"#inst "not-a-date""#).unwrap();
-    let output = Command::new("./target/release/eq")
+    let output = Command::new(&get_binary_path())
         .args(&[".", "test_bad_inst.edn"])
         .output()
         .expect("Failed to execute eq");
@@ -344,7 +366,7 @@ fn test_builtin_tagged_literals() {
 fn test_unicode_escapes() {
     // Test unicode character literal
     fs::write("test_unicode_char.edn", r#"\u03A9"#).unwrap();
-    let output = Command::new("./target/release/eq")
+    let output = Command::new(&get_binary_path())
         .args(&[".", "test_unicode_char.edn"])
         .output()
         .expect("Failed to execute eq");
@@ -356,7 +378,7 @@ fn test_unicode_escapes() {
     
     // Test unicode in string
     fs::write("test_unicode_string.edn", r#""Hello \u03A9 World""#).unwrap();
-    let output = Command::new("./target/release/eq")
+    let output = Command::new(&get_binary_path())
         .args(&[".", "test_unicode_string.edn"])
         .output()
         .expect("Failed to execute eq");
@@ -371,7 +393,7 @@ fn test_unicode_escapes() {
 fn test_new_character_literals() {
     // Test formfeed character
     fs::write("test_formfeed.edn", r#"\formfeed"#).unwrap();
-    let output = Command::new("./target/release/eq")
+    let output = Command::new(&get_binary_path())
         .args(&[".", "test_formfeed.edn"])
         .output()
         .expect("Failed to execute eq");
@@ -381,7 +403,7 @@ fn test_new_character_literals() {
     
     // Test backspace character
     fs::write("test_backspace.edn", r#"\backspace"#).unwrap();
-    let output = Command::new("./target/release/eq")
+    let output = Command::new(&get_binary_path())
         .args(&[".", "test_backspace.edn"])
         .output()
         .expect("Failed to execute eq");
@@ -394,7 +416,7 @@ fn test_new_character_literals() {
 fn test_comma_as_whitespace() {
     // Test commas in various collections
     fs::write("test_commas.edn", r#"[1, 2, 3]"#).unwrap();
-    let output = Command::new("./target/release/eq")
+    let output = Command::new(&get_binary_path())
         .args(&[".", "test_commas.edn"])
         .output()
         .expect("Failed to execute eq");
@@ -406,7 +428,7 @@ fn test_comma_as_whitespace() {
     
     // Test commas in map
     fs::write("test_commas_map.edn", r#"{:a 1, :b 2, :c 3}"#).unwrap();
-    let output = Command::new("./target/release/eq")
+    let output = Command::new(&get_binary_path())
         .args(&[".", "test_commas_map.edn"])
         .output()
         .expect("Failed to execute eq");
@@ -420,7 +442,7 @@ fn test_comma_as_whitespace() {
     
     // Test trailing commas
     fs::write("test_trailing_commas.edn", r#"[1, 2, 3,]"#).unwrap();
-    let output = Command::new("./target/release/eq")
+    let output = Command::new(&get_binary_path())
         .args(&["(count .)", "test_trailing_commas.edn"])
         .output()
         .expect("Failed to execute eq");
@@ -432,7 +454,7 @@ fn test_comma_as_whitespace() {
     
     // Test multiple consecutive commas
     fs::write("test_multiple_commas.edn", r#"[1,, 2,,, 3]"#).unwrap();
-    let output = Command::new("./target/release/eq")
+    let output = Command::new(&get_binary_path())
         .args(&["(count .)", "test_multiple_commas.edn"])
         .output()
         .expect("Failed to execute eq");
@@ -446,7 +468,7 @@ fn test_comma_as_whitespace() {
 #[test]
 fn test_file_errors() {
     // Test non-existent file
-    let output = Command::new("./target/release/eq")
+    let output = Command::new(&get_binary_path())
         .args(&[".", "nonexistent.edn"])
         .output()
         .expect("Failed to execute eq");
@@ -458,7 +480,7 @@ fn test_file_errors() {
     // Test directory instead of file - should now succeed but produce no output
     let _ = fs::remove_dir("test_dir"); // Clean up if exists from previous run
     fs::create_dir("test_dir").unwrap();
-    let output = Command::new("./target/release/eq")
+    let output = Command::new(&get_binary_path())
         .args(&[".", "test_dir"])
         .output()
         .expect("Failed to execute eq");
