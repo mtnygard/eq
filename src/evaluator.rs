@@ -1,6 +1,6 @@
 use crate::edn::EdnValue;
 use crate::error::{EqError, EqResult};
-use crate::query::ast::{Expr, FunctionRegistry, Environment};
+use crate::query::ast::{Expr, FunctionRegistry, Environment, FunctionType};
 use crate::builtins::create_builtin_registry;
 
 use std::sync::OnceLock;
@@ -10,7 +10,54 @@ static FUNCTION_REGISTRY: OnceLock<FunctionRegistry> = OnceLock::new();
 
 /// Initialize the global function registry
 fn get_function_registry() -> &'static FunctionRegistry {
-    FUNCTION_REGISTRY.get_or_init(|| create_builtin_registry())
+    FUNCTION_REGISTRY.get_or_init(|| {
+        let mut registry = create_builtin_registry();
+        
+        // Add special forms here to avoid circular dependencies
+        registry.register_special_form("if".to_string(), special_form_if);
+        registry.register_special_form("do".to_string(), special_form_do);
+        
+        registry
+    })
+}
+
+/// Special form implementation for 'if'
+fn special_form_if(args: &[Expr], context: &EdnValue, env: &Environment) -> EqResult<EdnValue> {
+    match args.len() {
+        2 => {
+            // (if test then)
+            let test_result = evaluate_with_env(&args[0], context, env)?;
+            if test_result.is_truthy() {
+                evaluate_with_env(&args[1], context, env)
+            } else {
+                Ok(EdnValue::Nil)
+            }
+        }
+        3 => {
+            // (if test then else)
+            let test_result = evaluate_with_env(&args[0], context, env)?;
+            if test_result.is_truthy() {
+                evaluate_with_env(&args[1], context, env)
+            } else {
+                evaluate_with_env(&args[2], context, env)
+            }
+        }
+        _ => Err(EqError::query_error("if takes 2 or 3 arguments".to_string())),
+    }
+}
+
+/// Special form implementation for 'do'
+fn special_form_do(args: &[Expr], context: &EdnValue, env: &Environment) -> EqResult<EdnValue> {
+    if args.is_empty() {
+        return Ok(EdnValue::Nil);
+    }
+    
+    // Evaluate all expressions in sequence, returning the last result
+    let mut result = EdnValue::Nil;
+    for expr in args {
+        result = evaluate_with_env(expr, context, env)?;
+    }
+    Ok(result)
 }
 
 /// Direct AST evaluator that treats expressions as functions
@@ -29,14 +76,6 @@ pub fn evaluate_with_env(expr: &Expr, context: &EdnValue, env: &Environment) -> 
                 .ok_or_else(|| EqError::query_error(format!("Undefined symbol: {}", name)))
         }
         
-        Expr::Get(key) => {
-            Ok(context.get(key).cloned().unwrap_or(EdnValue::Nil))
-        }
-        
-        Expr::GetIn(input_expr, path) => {
-            let input_value = evaluate_with_env(input_expr, context, env)?;
-            Ok(input_value.get_in(path.clone()).cloned().unwrap_or(EdnValue::Nil))
-        }
         
         Expr::KeywordAccess(name) => {
             let key = EdnValue::Keyword(name.clone());
@@ -58,18 +97,34 @@ pub fn evaluate_with_env(expr: &Expr, context: &EdnValue, env: &Environment) -> 
             }
         }
         
-        // Collection operations
+        // Function calls (regular functions and special forms)
         Expr::Function { name, args } => {
             let registry = get_function_registry();
-            if let Some(func) = registry.get(name) {
-                // Evaluate all arguments
-                let mut eval_args = Vec::new();
-                for arg in args {
-                    eval_args.push(evaluate_with_env(arg, context, env)?);
+            if let Some(func_type) = registry.get(name) {
+                match func_type {
+                    FunctionType::Regular(func) => {
+                        // Evaluate all arguments for regular functions
+                        let mut eval_args = Vec::new();
+                        for arg in args {
+                            eval_args.push(evaluate_with_env(arg, context, env)?);
+                        }
+                        
+                        // Call the regular function
+                        func(&eval_args, context)
+                    }
+                    FunctionType::SpecialForm(special_func) => {
+                        // Pass unevaluated arguments to special forms
+                        special_func(args, context, env)
+                    }
+                    FunctionType::Macro(macro_func) => {
+                        // Macros return new expressions that need to be analyzed and evaluated
+                        let expanded_expr = macro_func(args)?;
+                        // Re-analyze the expanded expression (may contain more macros)
+                        let analyzed_expr = crate::analyzer::analyze(expanded_expr)?;
+                        // Then evaluate the fully analyzed expression
+                        evaluate_with_env(&analyzed_expr, context, env)
+                    }
                 }
-                
-                // Call the function
-                func(&eval_args, context)
             } else {
                 Err(EqError::query_error(format!("Unknown function: {}", name)))
             }
@@ -85,17 +140,6 @@ pub fn evaluate_with_env(expr: &Expr, context: &EdnValue, env: &Environment) -> 
             Ok(result)
         }
         
-        // Conditionals
-        Expr::If { test, then_expr, else_expr } => {
-            let test_result = evaluate_with_env(test, context, env)?;
-            if test_result.is_truthy() {
-                evaluate_with_env(then_expr, context, env)
-            } else if let Some(else_expr) = else_expr {
-                evaluate_with_env(else_expr, context, env)
-            } else {
-                Ok(EdnValue::Nil)
-            }
-        }
         
         // Literals
         Expr::Literal(value) => Ok(value.clone()),
@@ -103,11 +147,6 @@ pub fn evaluate_with_env(expr: &Expr, context: &EdnValue, env: &Environment) -> 
         // Raw lists should be analyzed away before evaluation
         Expr::List(_) => {
             Err(EqError::query_error("Unanalyzed list expression found - analysis phase should handle all lists"))
-        }
-        
-        // Macros should have been expanded before evaluation
-        Expr::ThreadFirst(_) | Expr::ThreadLast(_) | Expr::When { .. } => {
-            Err(EqError::query_error("Unexpanded macro found - macros should be expanded before evaluation".to_string()))
         }
     }
 }
@@ -218,10 +257,13 @@ mod tests {
             EdnValue::Integer(4),
         ]);
         
-        // Test take
+        // Test take - now requires 2 args: count and collection
         let take_expr = Expr::Function {
             name: "take".to_string(),
-            args: vec![Expr::Literal(EdnValue::Integer(2))],
+            args: vec![
+                Expr::Literal(EdnValue::Integer(2)),
+                Expr::Symbol(".".to_string()),
+            ],
         };
         let result = evaluate(&take_expr, &input).unwrap();
         assert_eq!(result, EdnValue::Vector(vec![
@@ -229,10 +271,13 @@ mod tests {
             EdnValue::Integer(2),
         ]));
         
-        // Test drop
+        // Test drop - now requires 2 args: count and collection
         let drop_expr = Expr::Function {
             name: "drop".to_string(),
-            args: vec![Expr::Literal(EdnValue::Integer(2))],
+            args: vec![
+                Expr::Literal(EdnValue::Integer(2)),
+                Expr::Symbol(".".to_string()),
+            ],
         };
         let result = evaluate(&drop_expr, &input).unwrap();
         assert_eq!(result, EdnValue::Vector(vec![
@@ -267,13 +312,16 @@ mod tests {
 
     #[test]
     fn test_if_expression() {
-        let expr = Expr::If {
-            test: Box::new(Expr::Function {
-                name: "nil?".to_string(),
-                args: vec![],
-            }),
-            then_expr: Box::new(Expr::Literal(EdnValue::String("it's nil".to_string()))),
-            else_expr: Some(Box::new(Expr::Literal(EdnValue::String("not nil".to_string())))),
+        let expr = Expr::Function {
+            name: "if".to_string(),
+            args: vec![
+                Expr::Function {
+                    name: "nil?".to_string(),
+                    args: vec![],
+                },
+                Expr::Literal(EdnValue::String("it's nil".to_string())),
+                Expr::Literal(EdnValue::String("not nil".to_string())),
+            ],
         };
         
         let result = evaluate(&expr, &EdnValue::Nil).unwrap();

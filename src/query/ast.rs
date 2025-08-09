@@ -5,6 +5,20 @@ use std::sync::Arc;
 /// Type alias for builtin function implementations
 pub type BuiltinFn = Arc<dyn Fn(&[EdnValue], &EdnValue) -> crate::error::EqResult<EdnValue> + Send + Sync>;
 
+/// Type alias for special form implementations (take unevaluated expressions)
+pub type SpecialFormFn = Arc<dyn Fn(&[Expr], &EdnValue, &Environment) -> crate::error::EqResult<EdnValue> + Send + Sync>;
+
+/// Type alias for macro implementations (take unevaluated expressions, return new expression)
+pub type MacroFn = Arc<dyn Fn(&[Expr]) -> crate::error::EqResult<Expr> + Send + Sync>;
+
+/// Represents either a regular function, special form, or macro
+#[derive(Clone)]
+pub enum FunctionType {
+    Regular(BuiltinFn),
+    SpecialForm(SpecialFormFn),
+    Macro(MacroFn),
+}
+
 /// Environment for symbol bindings during evaluation
 #[derive(Debug, Clone)]
 pub struct Environment {
@@ -33,10 +47,10 @@ impl Environment {
     }
 }
 
-/// Registry for builtin functions
+/// Registry for builtin functions and special forms
 #[derive(Clone)]
 pub struct FunctionRegistry {
-    functions: HashMap<String, BuiltinFn>,
+    functions: HashMap<String, FunctionType>,
 }
 
 impl std::fmt::Debug for FunctionRegistry {
@@ -58,10 +72,24 @@ impl FunctionRegistry {
     where
         F: Fn(&[EdnValue], &EdnValue) -> crate::error::EqResult<EdnValue> + Send + Sync + 'static,
     {
-        self.functions.insert(name, Arc::new(func));
+        self.functions.insert(name, FunctionType::Regular(Arc::new(func)));
     }
 
-    pub fn get(&self, name: &str) -> Option<&BuiltinFn> {
+    pub fn register_special_form<F>(&mut self, name: String, func: F)
+    where
+        F: Fn(&[Expr], &EdnValue, &Environment) -> crate::error::EqResult<EdnValue> + Send + Sync + 'static,
+    {
+        self.functions.insert(name, FunctionType::SpecialForm(Arc::new(func)));
+    }
+
+    pub fn register_macro<F>(&mut self, name: String, func: F)
+    where
+        F: Fn(&[Expr]) -> crate::error::EqResult<Expr> + Send + Sync + 'static,
+    {
+        self.functions.insert(name, FunctionType::Macro(Arc::new(func)));
+    }
+
+    pub fn get(&self, name: &str) -> Option<&FunctionType> {
         self.functions.get(name)
     }
 }
@@ -71,8 +99,6 @@ impl FunctionRegistry {
 pub enum Expr {
     // Basic selectors
     Symbol(String),                        // symbol lookup in environment
-    Get(EdnValue),                         // (get :key) or (get 0)
-    GetIn(Box<Expr>, Vec<EdnValue>),       // (get-in input [:a :b])
     KeywordAccess(String),                 // :key (shorthand for get)
     KeywordGet(String, Box<Expr>),         // (:key expr) - get key from result of expr
     KeywordGetWithDefault(String, Box<Expr>, Box<Expr>), // (:key expr default) - get key with default
@@ -84,20 +110,7 @@ pub enum Expr {
     },
 
     // Composition
-    ThreadFirst(Vec<Expr>),               // (-> x f g h)
-    ThreadLast(Vec<Expr>),                // (->> x f g h)
     Comp(Vec<Expr>),                      // (comp f g)
-
-    // Conditionals
-    If {                                  // (if test then else)
-        test: Box<Expr>,
-        then_expr: Box<Expr>,
-        else_expr: Option<Box<Expr>>,
-    },
-    When {                                // (when test expr)
-        test: Box<Expr>,
-        expr: Box<Expr>,
-    },
 
     // Raw parsed forms (before analysis)
     List(Vec<EdnValue>),                 // raw list from parser, needs analysis
@@ -117,9 +130,11 @@ mod tests {
         let identity = Expr::Symbol(".".to_string());
         assert_eq!(identity, Expr::Symbol(".".to_string()));
 
-        let get_expr = Expr::Get(EdnValue::Keyword("name".to_string()));
-        assert_eq!(get_expr, Expr::Get(EdnValue::Keyword("name".to_string())));
-
+        let _get_expr = Expr::Function {
+            name: "get".to_string(),
+            args: vec![Expr::Literal(EdnValue::Keyword("name".to_string()))],
+        };
+        
         let keyword_expr = Expr::KeywordAccess("age".to_string());
         assert_eq!(keyword_expr, Expr::KeywordAccess("age".to_string()));
     }
@@ -139,8 +154,8 @@ mod tests {
     }
 
     #[test]
-    fn test_threading_expressions() {
-        let thread_first = Expr::ThreadFirst(vec![
+    fn test_composition_expressions() {
+        let comp_expr = Expr::Comp(vec![
             Expr::Symbol(".".to_string()),
             Expr::Function {
                 name: "first".to_string(),
@@ -149,14 +164,14 @@ mod tests {
             Expr::KeywordAccess("name".to_string())
         ]);
         
-        match thread_first {
-            Expr::ThreadFirst(exprs) => {
+        match comp_expr {
+            Expr::Comp(exprs) => {
                 assert_eq!(exprs.len(), 3);
                 assert_eq!(exprs[0], Expr::Symbol(".".to_string()));
                 assert!(matches!(exprs[1], Expr::Function { .. }));
                 assert_eq!(exprs[2], Expr::KeywordAccess("name".to_string()));
             }
-            _ => panic!("Expected ThreadFirst"),
+            _ => panic!("Expected Comp"),
         }
     }
 }
