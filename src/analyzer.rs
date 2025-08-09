@@ -1,4 +1,4 @@
-use crate::edn::EdnValue;
+use crate::edn::{EdnValue, value::EdnLambda};
 use crate::error::{EqError, EqResult};
 use crate::query::ast::{Expr, FunctionRegistry, FunctionType};
 use crate::builtins::create_builtin_registry;
@@ -45,6 +45,11 @@ fn analyze_once(expr: Expr) -> EqResult<Expr> {
             
             match head {
                 EdnValue::Symbol(name) => {
+                    // Special handling for lambda syntax (fn [params] body)
+                    if name == "fn" {
+                        return analyze_lambda(args);
+                    }
+                    
                     let registry = get_analyzer_registry();
                     if let Some(func_type) = registry.get(name) {
                         if let FunctionType::Macro(macro_func) = func_type {
@@ -84,6 +89,13 @@ fn analyze_once(expr: Expr) -> EqResult<Expr> {
         Expr::Function { name, args } => {
             Ok(Expr::Function {
                 name,
+                args: args.into_iter().map(analyze).collect::<Result<Vec<_>, _>>()?,
+            })
+        }
+
+        Expr::LambdaCall { func, args } => {
+            Ok(Expr::LambdaCall {
+                func: Box::new(analyze(*func)?),
                 args: args.into_iter().map(analyze).collect::<Result<Vec<_>, _>>()?,
             })
         }
@@ -144,3 +156,37 @@ fn edn_to_expr(value: &EdnValue) -> EqResult<Expr> {
 }
 
 // Helper functions for special cases
+
+/// Analyze lambda syntax: (fn [params] body)
+fn analyze_lambda(args: &[EdnValue]) -> EqResult<Expr> {
+    if args.len() != 2 {
+        return Err(EqError::query_error("fn requires exactly 2 arguments: parameter vector and body"));
+    }
+    
+    // First argument should be a parameter vector
+    let params = match &args[0] {
+        EdnValue::Vector(params) => {
+            let mut param_names = Vec::new();
+            for param in params {
+                if let EdnValue::Symbol(name) = param {
+                    param_names.push(name.clone());
+                } else {
+                    return Err(EqError::query_error("fn parameters must be symbols"));
+                }
+            }
+            param_names
+        }
+        _ => return Err(EqError::query_error("fn first argument must be a parameter vector")),
+    };
+    
+    // Second argument is the body
+    let body = &args[1];
+    
+    // Create lambda and return as literal expression
+    let lambda = EdnLambda {
+        params,
+        body: Box::new(body.clone()),
+    };
+    
+    Ok(Expr::Literal(EdnValue::Lambda(lambda)))
+}

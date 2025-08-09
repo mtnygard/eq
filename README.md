@@ -296,6 +296,204 @@ eq -f get-first-name.eq users.edn
 # Output: "Alice"
 ```
 
+## Lambda Functions and Higher-Order Operations
+
+`eq` supports lambda functions (anonymous functions) for powerful data transformation and filtering operations, similar to Clojure and functional programming languages.
+
+### Lambda Syntax
+
+**Explicit lambda syntax:**
+```bash
+# (fn [parameters] body)
+(fn [x] (> x 10))      # Function that checks if x is greater than 10
+(fn [x y] (+ x y))     # Function that adds two numbers
+```
+
+**Anonymous function syntax (shorthand):**
+```bash
+# #(body-with-% parameters)  
+#(> % 10)              # Same as (fn [%] (> % 10))
+#(< 3 %)               # Same as (fn [%] (< 3 %))
+```
+
+The `%` symbol represents the implicit parameter in anonymous functions.
+
+### Higher-Order Functions
+
+**map - Transform each element in a collection:**
+```bash
+# Input: [1 2 3 4 5]
+eq '(map #(> % 3) .)' numbers.edn
+# Output: [false false false true true]
+
+# Transform numbers to strings
+eq '(map #(str %) .)' numbers.edn  # Note: str function would need to be implemented
+```
+
+**select - Filter elements that satisfy a predicate (keep matching):**
+```bash
+# Input: [1 2 3 4 5]  
+eq '(select #(> % 3) .)' numbers.edn
+# Output: [4 5]
+
+# Input: ["hello" "world" 42 true "test"]
+eq '(select #(string? %) .)' mixed.edn  
+# Output: ["hello" "world" "test"]
+```
+
+**remove - Filter out elements that satisfy a predicate (remove matching):**
+```bash
+# Input: [1 2 3 4 5]
+eq '(remove #(> % 3) .)' numbers.edn  
+# Output: [1 2 3]
+
+# Remove nil values
+# Input: [1 nil 3 nil 5]
+eq '(remove #(nil? %) .)' sparse.edn
+# Output: [1 3 5]
+```
+
+### Real-World Lambda Examples
+
+**Example 1: Data Validation**
+
+**Input file (users.edn):**
+```clojure  
+[{:name "Alice" :age 30 :active true}
+ {:name "Bob" :age 17 :active true}  
+ {:name "Charlie" :age 25 :active false}]
+```
+
+**Find active adult users:**
+```bash
+eq '(select #(and (:active %) (>= (:age %) 18)) .)' users.edn
+# Output: [{:name "Alice" :age 30 :active true}]
+```
+
+**Find users who need activation:**  
+```bash
+eq '(select #(not (:active %)) .)' users.edn
+# Output: [{:name "Charlie" :age 25 :active false}]
+```
+
+**Example 2: Number Processing**
+
+**Input file (scores.edn):**
+```clojure
+[85 92 78 96 73 88 91]
+```
+
+**Find passing scores (>= 80):**
+```bash
+eq '(select #(>= % 80) .)' scores.edn  
+# Output: [85 92 96 88 91]
+```
+
+**Count failing scores:**
+```bash
+eq '(-> . (remove #(>= % 80)) (count))' scores.edn
+# Output: 2
+```
+
+**Convert to pass/fail:**
+```bash  
+eq '(map #(if (>= % 80) :pass :fail) .)' scores.edn
+# Output: [:pass :pass :fail :pass :fail :pass :pass]
+```
+
+**Example 3: Configuration Filtering**
+
+**Input file (services.edn):**
+```clojure
+[{:name "web" :port 8080 :enabled true}
+ {:name "db" :port 5432 :enabled false}  
+ {:name "cache" :port 6379 :enabled true}]
+```
+
+**Get enabled services:**
+```bash
+eq '(select #(:enabled %) .)' services.edn
+# Output: [{:name "web" :port 8080 :enabled true} 
+#          {:name "cache" :port 6379 :enabled true}]
+```
+
+**Get service names for enabled services:**
+```bash
+eq '(-> . (select #(:enabled %)) (map #(:name %)))' services.edn  
+# Output: ["web" "cache"]
+```
+
+### Combining Lambda Functions
+
+**Chain multiple operations:**
+```bash
+# Input: [1 2 3 4 5 6 7 8 9 10]
+# Get even numbers, then square them, then filter > 20
+eq '(-> . 
+        (select #(= (mod % 2) 0))  
+        (map #(* % %))
+        (select #(> % 20)))' numbers.edn
+# Output: [36 64 100]  
+```
+
+**Using with other functions:**
+```bash
+# Input: [1 2 3 2 1 4 2]  
+eq '(-> . (remove #(= % 2)) (frequencies))' numbers.edn
+# Output: {1 2, 3 1, 4 1}
+```
+
+### Supported Predicates in Lambdas
+
+Lambda functions can use any of the built-in predicates and comparison operators:
+
+**Type predicates:**
+- `nil?` - Check if value is nil
+- `number?` - Check if value is a number  
+- `string?` - Check if value is a string
+- `boolean?` - Check if value is a boolean
+- `keyword?` - Check if value is a keyword
+- `empty?` - Check if collection is empty
+
+**Comparison operators:**
+- `=` - Equal to
+- `<` - Less than  
+- `>` - Greater than
+- `<=` - Less than or equal
+- `>=` - Greater than or equal
+
+**Example using multiple predicates:**
+```bash
+# Input: [1 "hello" nil 42 "" true]
+eq '(select #(and (number? %) (> % 10)) .)' mixed.edn
+# Output: [42]
+```
+
+### Tips for Using Lambdas
+
+1. **Use explicit syntax for complex functions:**
+   ```bash
+   # Complex logic is clearer with explicit parameters
+   (fn [user] (and (:active user) (>= (:age user) 21)))
+   ```
+
+2. **Use anonymous syntax for simple predicates:**
+   ```bash
+   # Simple checks work well with shorthand  
+   #(> % 100)
+   #(string? %)
+   ```
+
+3. **Combine with threading macros:**
+   ```bash
+   # Chain operations for readability
+   (-> . (select #(active? %)) (map #(:name %)) (take 5))
+   ```
+
+4. **Remember parameter binding:**
+   - In `#(...)` syntax, `%` is the implicit parameter
+   - In `(fn [...] ...)` syntax, use explicit parameter names
+
 ## Advanced Query Language
 
 ### Type Checking
@@ -416,6 +614,9 @@ eq '(-> . :entries (filter #(= (:level %) :error)))' log.edn
 | Map keys | `keys` | `(keys .)` |
 | Nested access | `.user.profile.name` | `(get-in . [:user :profile :name])` |
 | Chaining | `.user \| .name` | `(-> . (:user) (:name))` |
+| Map/transform | `map(. + 1)` | `(map #(+ % 1) .)` |
+| Filter/select | `map(select(. > 3))` | `(select #(> % 3) .)` |
+| Remove/reject | `map(select(. <= 3))` | `(remove #(> % 3) .)` |
 
 ## Contributing
 

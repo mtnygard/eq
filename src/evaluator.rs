@@ -129,6 +129,21 @@ pub fn evaluate_with_env(expr: &Expr, context: &EdnValue, env: &Environment) -> 
                 Err(EqError::query_error(format!("Unknown function: {}", name)))
             }
         }
+
+        // Lambda function call
+        Expr::LambdaCall { func, args } => {
+            // Evaluate the function expression to get the lambda
+            let lambda_value = evaluate_with_env(func, context, env)?;
+            
+            // Evaluate all arguments
+            let mut eval_args = Vec::new();
+            for arg in args {
+                eval_args.push(evaluate_with_env(arg, context, env)?);
+            }
+            
+            // Call the lambda
+            call_lambda(&lambda_value, &eval_args, context, env)
+        }
         
         // Composition - evaluate expressions in sequence
         Expr::Comp(exprs) => {
@@ -148,6 +163,47 @@ pub fn evaluate_with_env(expr: &Expr, context: &EdnValue, env: &Environment) -> 
         Expr::List(_) => {
             Err(EqError::query_error("Unanalyzed list expression found - analysis phase should handle all lists"))
         }
+    }
+}
+
+/// Call a lambda function with the given arguments
+fn call_lambda(lambda_value: &EdnValue, args: &[EdnValue], _context: &EdnValue, _env: &Environment) -> EqResult<EdnValue> {
+    match lambda_value {
+        EdnValue::Lambda(lambda) => {
+            // Check argument count
+            if args.len() != lambda.params.len() {
+                return Err(EqError::query_error(format!(
+                    "Lambda expects {} arguments, got {}",
+                    lambda.params.len(),
+                    args.len()
+                )));
+            }
+            
+            // Create new environment with parameter bindings
+            let mut new_env = Environment::new();
+            for (param, arg) in lambda.params.iter().zip(args) {
+                new_env.bind(param.clone(), arg.clone());
+            }
+            
+            // Parse and analyze the lambda body into an expression
+            let body_expr = edn_to_expr(&lambda.body)?;
+            let analyzed_body = crate::analyzer::analyze(body_expr)?;
+            
+            // Evaluate the body with the new environment
+            // Use the first argument as context, or nil if no arguments
+            let body_context = args.first().cloned().unwrap_or(EdnValue::Nil);
+            evaluate_with_env(&analyzed_body, &body_context, &new_env)
+        }
+        _ => Err(EqError::type_error("lambda", lambda_value.type_name())),
+    }
+}
+
+/// Convert EDN value to expression (simple version for lambda bodies)
+fn edn_to_expr(value: &EdnValue) -> EqResult<Expr> {
+    match value {
+        EdnValue::Symbol(name) => Ok(Expr::Symbol(name.clone())),
+        EdnValue::List(elements) => Ok(Expr::List(elements.clone())),
+        _ => Ok(Expr::Literal(value.clone())),
     }
 }
 
@@ -449,5 +505,146 @@ mod tests {
         } else {
             panic!("Expected map result from frequencies");
         }
+    }
+
+    #[test]
+    fn test_lambda_parsing() {
+        // Test that (fn [x] (< 10 x)) creates a lambda
+        
+        let expr = crate::analyzer::analyze(Expr::List(vec![
+            EdnValue::Symbol("fn".to_string()),
+            EdnValue::Vector(vec![EdnValue::Symbol("x".to_string())]),
+            EdnValue::List(vec![
+                EdnValue::Symbol("<".to_string()),
+                EdnValue::Integer(10),
+                EdnValue::Symbol("x".to_string()),
+            ]),
+        ])).unwrap();
+        
+        let result = evaluate(&expr, &EdnValue::Nil).unwrap();
+        
+        if let EdnValue::Lambda(lambda) = result {
+            assert_eq!(lambda.params, vec!["x".to_string()]);
+        } else {
+            panic!("Expected lambda result, got {:?}", result);
+        }
+    }
+
+    #[test]
+    fn test_map_with_lambda() {
+        let input = EdnValue::Vector(vec![
+            EdnValue::Integer(1),
+            EdnValue::Integer(2),
+            EdnValue::Integer(3),
+            EdnValue::Integer(4),
+            EdnValue::Integer(5),
+        ]);
+        
+        // Create (map (fn [x] (< 3 x)) .)
+        let lambda = EdnValue::Lambda(crate::edn::value::EdnLambda {
+            params: vec!["x".to_string()],
+            body: Box::new(EdnValue::List(vec![
+                EdnValue::Symbol("<".to_string()),
+                EdnValue::Integer(3),
+                EdnValue::Symbol("x".to_string()),
+            ])),
+        });
+        
+        let expr = Expr::Function {
+            name: "map".to_string(),
+            args: vec![
+                Expr::Literal(lambda),
+                Expr::Symbol(".".to_string()),
+            ],
+        };
+        
+        let result = evaluate(&expr, &input).unwrap();
+        
+        let expected = EdnValue::Vector(vec![
+            EdnValue::Bool(false),
+            EdnValue::Bool(false),
+            EdnValue::Bool(false),
+            EdnValue::Bool(true),
+            EdnValue::Bool(true),
+        ]);
+        
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_select_with_lambda() {
+        let input = EdnValue::Vector(vec![
+            EdnValue::Integer(1),
+            EdnValue::Integer(2),
+            EdnValue::Integer(3),
+            EdnValue::Integer(4),
+            EdnValue::Integer(5),
+        ]);
+        
+        // Create (select (fn [x] (< 3 x)) .)
+        let lambda = EdnValue::Lambda(crate::edn::value::EdnLambda {
+            params: vec!["x".to_string()],
+            body: Box::new(EdnValue::List(vec![
+                EdnValue::Symbol("<".to_string()),
+                EdnValue::Integer(3),
+                EdnValue::Symbol("x".to_string()),
+            ])),
+        });
+        
+        let expr = Expr::Function {
+            name: "select".to_string(),
+            args: vec![
+                Expr::Literal(lambda),
+                Expr::Symbol(".".to_string()),
+            ],
+        };
+        
+        let result = evaluate(&expr, &input).unwrap();
+        
+        let expected = EdnValue::Vector(vec![
+            EdnValue::Integer(4),
+            EdnValue::Integer(5),
+        ]);
+        
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_remove_with_lambda() {
+        let input = EdnValue::Vector(vec![
+            EdnValue::Integer(1),
+            EdnValue::Integer(2),
+            EdnValue::Integer(3),
+            EdnValue::Integer(4),
+            EdnValue::Integer(5),
+        ]);
+        
+        // Create (remove (fn [x] (< 3 x)) .)
+        let lambda = EdnValue::Lambda(crate::edn::value::EdnLambda {
+            params: vec!["x".to_string()],
+            body: Box::new(EdnValue::List(vec![
+                EdnValue::Symbol("<".to_string()),
+                EdnValue::Integer(3),
+                EdnValue::Symbol("x".to_string()),
+            ])),
+        });
+        
+        let expr = Expr::Function {
+            name: "remove".to_string(),
+            args: vec![
+                Expr::Literal(lambda),
+                Expr::Symbol(".".to_string()),
+            ],
+        };
+        
+        let result = evaluate(&expr, &input).unwrap();
+        
+        let expected = EdnValue::Vector(vec![
+            EdnValue::Integer(1),
+            EdnValue::Integer(2),
+            EdnValue::Integer(3),
+        ]);
+        
+        assert_eq!(result, expected);
     }
 }

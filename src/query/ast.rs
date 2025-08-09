@@ -109,6 +109,12 @@ pub enum Expr {
         args: Vec<Expr>,
     },
 
+    // Lambda function call  
+    LambdaCall {
+        func: Box<Expr>,  // Expression that evaluates to a lambda
+        args: Vec<Expr>,
+    },
+
     // Composition
     Comp(Vec<Expr>),                      // (comp f g)
 

@@ -45,6 +45,10 @@ impl Formatter for CompactFormatter {
             EdnValue::WithMetadata { metadata, value } => {
                 format!("^{} {}", self.format(metadata, config, 0), self.format(value, config, 0))
             }
+            EdnValue::Lambda(lambda) => {
+                let params = lambda.params.join(" ");
+                format!("(fn [{}] {})", params, self.format(&lambda.body, config, 0))
+            }
             EdnValue::Instant(s) => format!("#inst \"{}\"", s),
             EdnValue::Uuid(s) => format!("#uuid \"{}\"", s),
         }
@@ -132,6 +136,10 @@ impl Formatter for PrettyFormatter {
             }
             EdnValue::WithMetadata { metadata, value } => {
                 format!("^{} {}", self.format(metadata, config, depth), self.format(value, config, depth))
+            }
+            EdnValue::Lambda(lambda) => {
+                let params = lambda.params.join(" ");
+                format!("(fn [{}] {})", params, self.format(&lambda.body, config, depth))
             }
             EdnValue::Instant(s) => format!("#inst \"{}\"", s),
             EdnValue::Uuid(s) => format!("#uuid \"{}\"", s),

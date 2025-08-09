@@ -2,7 +2,6 @@ use indexmap::IndexMap;
 use std::collections::HashSet;
 use std::fmt;
 use std::hash::{Hash, Hasher};
-// Remove dependency on CompiledQuery since we're not using it anymore
 
 /// Trait for sequential collection operations like first, last, rest, take, drop
 pub trait EdnSequential {
@@ -42,6 +41,13 @@ pub trait EdnAssociative {
     }
 }
 
+/// Simple representation of a lambda function
+#[derive(Debug, Clone, PartialEq)]
+pub struct EdnLambda {
+    pub params: Vec<String>,
+    pub body: Box<EdnValue>, // The body as an EdnValue (will be parsed to Expr later)
+}
+
 /// EDN value types with zero-copy string optimization
 #[derive(Debug, Clone, PartialEq)]
 pub enum EdnValue {
@@ -65,6 +71,7 @@ pub enum EdnValue {
         metadata: Box<EdnValue>,
         value: Box<EdnValue>,
     },
+    Lambda(EdnLambda), // Lambda function (fn [params] body)
     Instant(String), // ISO 8601 timestamp string
     Uuid(String),    // UUID string
 }
@@ -87,6 +94,7 @@ impl EdnValue {
             EdnValue::Set(_) => "set",
             EdnValue::Tagged { .. } => "tagged",
             EdnValue::WithMetadata { .. } => "with-metadata",
+            EdnValue::Lambda(_) => "lambda",
             EdnValue::Instant(_) => "instant",
             EdnValue::Uuid(_) => "uuid",
         }
@@ -254,6 +262,10 @@ impl Hash for EdnValue {
                 metadata.hash(state);
                 value.hash(state);
             }
+            EdnValue::Lambda(lambda) => {
+                lambda.params.hash(state);
+                lambda.body.hash(state);
+            }
             EdnValue::Instant(s) => s.hash(state),
             EdnValue::Uuid(s) => s.hash(state),
         }
@@ -315,6 +327,16 @@ impl fmt::Display for EdnValue {
             }
             EdnValue::Tagged { tag, value } => write!(f, "#{} {}", tag, value),
             EdnValue::WithMetadata { metadata, value } => write!(f, "^{} {}", metadata, value),
+            EdnValue::Lambda(lambda) => {
+                write!(f, "(fn [")?;
+                for (i, param) in lambda.params.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, " ")?;
+                    }
+                    write!(f, "{}", param)?;
+                }
+                write!(f, "] {})", lambda.body)
+            }
             EdnValue::Instant(s) => write!(f, "#inst \"{}\"", s),
             EdnValue::Uuid(s) => write!(f, "#uuid \"{}\"", s),
         }

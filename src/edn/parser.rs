@@ -307,6 +307,7 @@ impl Parser {
         
         match self.peek() {
             '{' => self.parse_set(),
+            '(' => self.parse_anonymous_function(),
             '_' => {
                 // This should not happen as #_ is handled in parse_value
                 Err(EqError::parse_error_with_file(self.filename.clone(),
@@ -348,6 +349,48 @@ impl Parser {
         
         self.advance(); // consume '}'
         Ok(EdnValue::Set(set))
+    }
+
+    fn parse_anonymous_function(&mut self) -> EqResult<EdnValue> {
+        self.advance(); // consume '('
+        let mut elements = Vec::new();
+        
+        self.skip_whitespace_and_comments();
+        while !self.is_at_end() && self.peek() != ')' {
+            if self.peek() == '#' && self.peek_ahead(1) == Some('_') {
+                // Handle discard macro
+                self.advance(); // consume '#'
+                self.consume_discard()?;
+            } else {
+                elements.push(self.parse_value()?);
+            }
+            self.skip_whitespace_and_comments();
+        }
+        
+        if self.is_at_end() {
+            return Err(EqError::parse_error_with_file(self.filename.clone(), self.line, self.column, "Unterminated anonymous function"));
+        }
+        
+        self.advance(); // consume ')'
+        
+        // Convert #(...) to (fn [%] (...))
+        // The body depends on how many elements we have
+        let body = if elements.len() == 1 {
+            // Single element: use it directly
+            elements[0].clone()
+        } else {
+            // Multiple elements: wrap in a list 
+            EdnValue::List(elements)
+        };
+        
+        // Create the lambda structure
+        let lambda_list = vec![
+            EdnValue::Symbol("fn".to_string()),
+            EdnValue::Vector(vec![EdnValue::Symbol("%".to_string())]), // parameter vector [%]
+            body, // body
+        ];
+        
+        Ok(EdnValue::List(lambda_list))
     }
 
     fn parse_tagged_literal(&mut self) -> EqResult<EdnValue> {
@@ -1276,6 +1319,65 @@ mod tests {
             assert_eq!(v.len(), 3);
         } else {
             panic!("Expected vector");
+        }
+    }
+
+    #[test]
+    fn test_parse_anonymous_function() {
+        // Test parsing #(< 10 %)
+        let mut parser = Parser::new("#(< 10 %)");
+        let result = parser.parse().unwrap();
+        
+        // Should parse as (fn [%] (< 10 %))
+        if let EdnValue::List(l) = result {
+            assert_eq!(l.len(), 3);
+            assert_eq!(l[0], EdnValue::Symbol("fn".to_string()));
+            
+            // Check parameter vector [%]
+            if let EdnValue::Vector(params) = &l[1] {
+                assert_eq!(params.len(), 1);
+                assert_eq!(params[0], EdnValue::Symbol("%".to_string()));
+            } else {
+                panic!("Expected parameter vector");
+            }
+            
+            // Check body (< 10 %)
+            if let EdnValue::List(body) = &l[2] {
+                assert_eq!(body.len(), 3);
+                assert_eq!(body[0], EdnValue::Symbol("<".to_string()));
+                assert_eq!(body[1], EdnValue::Integer(10));
+                assert_eq!(body[2], EdnValue::Symbol("%".to_string()));
+            } else {
+                panic!("Expected body list");
+            }
+        } else {
+            panic!("Expected list");
+        }
+    }
+
+    #[test]
+    fn test_parse_anonymous_function_simple() {
+        // Test parsing #(%)
+        let mut parser = Parser::new("#(%)");
+        let result = parser.parse().unwrap();
+        
+        // Should parse as (fn [%] %)
+        if let EdnValue::List(l) = result {
+            assert_eq!(l.len(), 3);
+            assert_eq!(l[0], EdnValue::Symbol("fn".to_string()));
+            
+            // Check parameter vector [%]
+            if let EdnValue::Vector(params) = &l[1] {
+                assert_eq!(params.len(), 1);
+                assert_eq!(params[0], EdnValue::Symbol("%".to_string()));
+            } else {
+                panic!("Expected parameter vector");
+            }
+            
+            // Check body %
+            assert_eq!(l[2], EdnValue::Symbol("%".to_string()));
+        } else {
+            panic!("Expected list");
         }
     }
 }

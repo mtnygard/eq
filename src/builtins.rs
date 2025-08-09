@@ -1,4 +1,4 @@
-use crate::edn::{EdnValue, EdnSequential, EdnIterable, EdnAssociative};
+use crate::edn::{EdnValue, EdnSequential, EdnIterable, EdnAssociative, value::EdnLambda};
 use crate::error::{EqError, EqResult};
 use crate::query::ast::{FunctionRegistry, Expr};
 use indexmap::IndexMap;
@@ -381,13 +381,56 @@ fn builtin_greater_equal(args: &[EdnValue]) -> EqResult<EdnValue> {
     }
 }
 
-// Higher-order operations (placeholders for now - would need evaluator reference)
-fn builtin_map(_args: &[EdnValue]) -> EqResult<EdnValue> {
-    Err(EqError::query_error("map not yet implemented with new function system".to_string()))
+// Higher-order operations
+fn builtin_map(args: &[EdnValue]) -> EqResult<EdnValue> {
+    if args.len() != 2 {
+        return Err(EqError::query_error("map expects exactly 2 arguments: function and collection".to_string()));
+    }
+    
+    let func = &args[0];
+    let collection = &args[1];
+    
+    // Extract the lambda
+    let lambda = match func {
+        EdnValue::Lambda(lambda) => lambda,
+        _ => return Err(EqError::type_error("lambda", func.type_name())),
+    };
+    
+    // Apply function to each element
+    let mut results = Vec::new();
+    for item in collection.iter_values() {
+        let result = call_lambda_simple(lambda, &[item.clone()])?;
+        results.push(result);
+    }
+    
+    Ok(EdnValue::Vector(results))
 }
 
-fn builtin_remove(_args: &[EdnValue]) -> EqResult<EdnValue> {
-    Err(EqError::query_error("remove not yet implemented with new function system".to_string()))
+fn builtin_remove(args: &[EdnValue]) -> EqResult<EdnValue> {
+    if args.len() != 2 {
+        return Err(EqError::query_error("remove expects exactly 2 arguments: predicate and collection".to_string()));
+    }
+    
+    let predicate = &args[0];
+    let collection = &args[1];
+    
+    // Extract the lambda
+    let lambda = match predicate {
+        EdnValue::Lambda(lambda) => lambda,
+        _ => return Err(EqError::type_error("lambda", predicate.type_name())),
+    };
+    
+    // Keep elements that don't satisfy the predicate
+    let mut results = Vec::new();
+    for item in collection.iter_values() {
+        let result = call_lambda_simple(lambda, &[item.clone()])?;
+        // Keep if predicate returns false/nil
+        if !result.is_truthy() {
+            results.push(item.clone());
+        }
+    }
+    
+    Ok(EdnValue::Vector(results))
 }
 
 fn builtin_select_keys(args: &[EdnValue]) -> EqResult<EdnValue> {
@@ -416,8 +459,31 @@ fn builtin_select_keys(args: &[EdnValue]) -> EqResult<EdnValue> {
     }
 }
 
-fn builtin_select(_args: &[EdnValue]) -> EqResult<EdnValue> {
-    Err(EqError::query_error("select not yet implemented with new function system".to_string()))
+fn builtin_select(args: &[EdnValue]) -> EqResult<EdnValue> {
+    if args.len() != 2 {
+        return Err(EqError::query_error("select expects exactly 2 arguments: predicate and collection".to_string()));
+    }
+    
+    let predicate = &args[0];
+    let collection = &args[1];
+    
+    // Extract the lambda
+    let lambda = match predicate {
+        EdnValue::Lambda(lambda) => lambda,
+        _ => return Err(EqError::type_error("lambda", predicate.type_name())),
+    };
+    
+    // Keep elements that satisfy the predicate
+    let mut results = Vec::new();
+    for item in collection.iter_values() {
+        let result = call_lambda_simple(lambda, &[item.clone()])?;
+        // Keep if predicate returns true
+        if result.is_truthy() {
+            results.push(item.clone());
+        }
+    }
+    
+    Ok(EdnValue::Vector(results))
 }
 
 // Aggregation
@@ -647,6 +713,89 @@ fn thread_last_expr(threaded_value: Expr, form: &Expr) -> EqResult<Expr> {
         }
         
         _ => Err(EqError::query_error("Invalid form in ->> macro")),
+    }
+}
+
+/// Simple lambda call implementation for builtin functions
+/// This is a simplified version that doesn't have access to full evaluation context
+fn call_lambda_simple(lambda: &EdnLambda, args: &[EdnValue]) -> EqResult<EdnValue> {
+    // Check argument count
+    if args.len() != lambda.params.len() {
+        return Err(EqError::query_error(format!(
+            "Lambda expects {} arguments, got {}",
+            lambda.params.len(),
+            args.len()
+        )));
+    }
+    
+    // For now, we'll implement a very basic evaluation that only handles simple expressions
+    // This is a limitation but allows us to test the basic functionality
+    match &*lambda.body {
+        // Handle simple function calls like (< 10 %)
+        EdnValue::List(elements) if !elements.is_empty() => {
+            if let EdnValue::Symbol(func_name) = &elements[0] {
+                // Create a simple environment for parameter substitution
+                let mut substituted_args = Vec::new();
+                for arg_edn in &elements[1..] {
+                    let substituted = substitute_params(arg_edn, &lambda.params, args)?;
+                    substituted_args.push(substituted);
+                }
+                
+                // Call the function with substituted arguments
+                match func_name.as_str() {
+                    "=" => builtin_equal(&substituted_args),
+                    "<" => builtin_less_than(&substituted_args),
+                    ">" => builtin_greater_than(&substituted_args),
+                    "<=" => builtin_less_equal(&substituted_args),
+                    ">=" => builtin_greater_equal(&substituted_args),
+                    "nil?" => builtin_is_nil(&substituted_args),
+                    "empty?" => builtin_is_empty(&substituted_args),
+                    "number?" => builtin_is_number(&substituted_args),
+                    "string?" => builtin_is_string(&substituted_args),
+                    "keyword?" => builtin_is_keyword(&substituted_args),
+                    "boolean?" => builtin_is_boolean(&substituted_args),
+                    _ => Err(EqError::query_error(format!("Unsupported function in lambda: {}", func_name))),
+                }
+            } else {
+                Err(EqError::query_error("Lambda body must start with a function symbol".to_string()))
+            }
+        }
+        // Handle direct parameter reference like %
+        EdnValue::Symbol(param) => {
+            if let Some(pos) = lambda.params.iter().position(|p| p == param) {
+                Ok(args[pos].clone())
+            } else {
+                Err(EqError::query_error(format!("Unknown parameter: {}", param)))
+            }
+        }
+        // Handle literals
+        _ => Ok(lambda.body.as_ref().clone()),
+    }
+}
+
+/// Substitute parameters in an EDN value
+fn substitute_params(value: &EdnValue, params: &[String], args: &[EdnValue]) -> EqResult<EdnValue> {
+    match value {
+        EdnValue::Symbol(name) => {
+            if let Some(pos) = params.iter().position(|p| p == name) {
+                Ok(args[pos].clone())
+            } else {
+                Ok(value.clone())
+            }
+        }
+        EdnValue::List(elements) => {
+            let substituted: Result<Vec<_>, _> = elements.iter()
+                .map(|elem| substitute_params(elem, params, args))
+                .collect();
+            Ok(EdnValue::List(substituted?))
+        }
+        EdnValue::Vector(elements) => {
+            let substituted: Result<Vec<_>, _> = elements.iter()
+                .map(|elem| substitute_params(elem, params, args))
+                .collect();
+            Ok(EdnValue::Vector(substituted?))
+        }
+        _ => Ok(value.clone()),
     }
 }
 
